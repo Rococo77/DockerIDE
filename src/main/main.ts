@@ -2,6 +2,7 @@
 import { app, BrowserWindow } from 'electron';
 import path from 'path';
 import { registerDockerHandlers } from './ipc/dockerHandlers';
+import { DockerManager } from './docker/DockerManager';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -34,6 +35,12 @@ function createWindow() {
 app.whenReady().then(() => {
     // Enregistrer les handlers IPC
     registerDockerHandlers();
+    // Check Docker connection on startup and log
+    DockerManager.getInstance().checkConnection().then((info) => {
+        console.log('[main] Docker check on startup -> ', info);
+    }).catch((err) => {
+        console.error('[main] Error checking docker', err);
+    });
 
     createWindow();
 
