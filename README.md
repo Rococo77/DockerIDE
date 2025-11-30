@@ -125,6 +125,7 @@ npm run build
 ### Phase 1 - MVP (En cours)
 - [x] Setup Electron + Vite + TypeScript
 - [ ] Intégration Docker API
+ - [x] Intégration Docker API (liste des conteneurs/images, actions de base)
 - [ ] Création de projet basique
 - [ ] Éditeur Monaco
 - [ ] Terminal intégré
