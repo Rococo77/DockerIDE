@@ -1,7 +1,7 @@
 import React from 'react';
 import ContainerDashboard from './components/ContainerDashboard';
 import ImageMarketplace from './components/ImageMarketplace';
-import DockerStatus from './components/DockerStatus';
+import { DockerStatus } from './components/DockerStatus';
 
 const App: React.FC = () => {
     return (
