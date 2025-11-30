@@ -18,9 +18,7 @@ export const DockerStatus: React.FC = () => {
     const checkDocker = async () => {
         setLoading(true);
         try {
-            console.log('[DockerStatus] invoking checkConnection');
             const result = await window.electronAPI.docker.checkConnection();
-            console.log('[DockerStatus] checkConnection result', result);
             if (result.success) {
                 setDockerInfo(result.data);
             } else {

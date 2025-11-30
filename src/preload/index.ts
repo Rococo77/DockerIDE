@@ -1,7 +1,6 @@
 
 import { contextBridge, ipcRenderer } from 'electron';
 
-console.log('[preload] preload script loaded and exposing electronAPI');
 // API exposée au renderer de manière sécurisée
 const api = {
     docker: {
