@@ -18,6 +18,11 @@ const ContainerDashboard: React.FC = () => {
     const refresh = async () => {
         setLoading(true);
         try {
+            if (!window.electronAPI || !window.electronAPI.docker) {
+                setContainers([]);
+                setImages([]);
+                return;
+            }
             const cRes = await window.electronAPI.docker.listContainers(true);
             if (cRes.success) setContainers(cRes.data as ContainerInfo[]);
             const iRes = await window.electronAPI.docker.listImages();

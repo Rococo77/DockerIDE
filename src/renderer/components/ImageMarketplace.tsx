@@ -5,6 +5,10 @@ const ImageMarketplace: React.FC = () => {
 	const [term, setTerm] = useState('');
 
 	const fetchImages = async () => {
+		if (!window.electronAPI || !window.electronAPI.docker) {
+			setImages([]);
+			return;
+		}
 		const res = await window.electronAPI.docker.listImages();
 		if (res.success) setImages(res.data);
 	};
@@ -15,6 +19,7 @@ const ImageMarketplace: React.FC = () => {
 
 	const search = async () => {
 		if (!term) return;
+		if (!window.electronAPI || !window.electronAPI.docker) return;
 		const res = await window.electronAPI.docker.searchImage(term);
 		if (res.success) {
 			// show search results temporarily
