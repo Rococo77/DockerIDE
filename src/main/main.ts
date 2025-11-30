@@ -10,7 +10,8 @@ function createWindow() {
         width: 1200,
         height: 800,
         webPreferences: {
-            preload: path.join(__dirname, '../preload/index.js'),
+            // Vite builds preload to `preload.js` in the build folder
+            preload: path.join(__dirname, '../preload.js'),
             nodeIntegration: false,
             contextIsolation: true,
         },
