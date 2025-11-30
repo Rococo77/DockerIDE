@@ -36,6 +36,7 @@ export class DockerManager {
      */
     public async checkConnection(): Promise<DockerInfo> {
         try {
+            // Try with current docker instance
             const info = await this.docker.info();
             const version = await this.docker.version();
 
@@ -48,10 +49,27 @@ export class DockerManager {
                 imageCount: info.Images,
             };
         } catch (error) {
-            return {
-                isConnected: false,
-                error: this.getErrorMessage(error),
-            };
+            // If first attempt fails, try to create a fallback docker client
+            try {
+                const fallback = new Docker(); // uses env vars or defaults
+                const info = await fallback.info();
+                const version = await fallback.version();
+                // replace instance for further calls
+                this.docker = fallback;
+                return {
+                    isConnected: true,
+                    version: version.Version,
+                    os: info.OperatingSystem,
+                    architecture: info.Architecture,
+                    containerCount: info.Containers,
+                    imageCount: info.Images,
+                };
+            } catch (err2) {
+                return {
+                    isConnected: false,
+                    error: this.getErrorMessage(error),
+                };
+            }
         }
     }
 
