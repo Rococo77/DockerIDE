@@ -14,6 +14,7 @@ export function registerDockerHandlers() {
     ipcMain.handle('docker:check-connection', async () => {
         try {
             const info = await dockerManager.checkConnection();
+            console.log('[dockerHandlers] docker:check-connection ->', info);
             return { success: true, data: info };
         } catch (error: any) {
             return { success: false, error: error.message };
@@ -36,6 +37,7 @@ export function registerDockerHandlers() {
     ipcMain.handle('container:list', async (_event, all = true) => {
         try {
             const list = await containerManager.listContainers(all);
+            console.log('[dockerHandlers] container:list -> found', list.length, 'containers');
             return { success: true, data: list };
         } catch (error: any) {
             return { success: false, error: error.message };
