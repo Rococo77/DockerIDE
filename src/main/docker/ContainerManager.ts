@@ -76,11 +76,11 @@ export class ContainerManager {
 	public async getContainerStats(id: string, stream = false): Promise<any> {
 		const container = this.docker.getContainer(id);
 		if (stream === true) {
-			const statsStream = await container.stats({ stream: true as true });
+			const statsStream = await container.stats({ stream: true } as const);
 			return statsStream;
 		}
 		// stream=false -> returns a ContainerStats object directly
-		const stats = await container.stats({ stream: false as false });
+		const stats = await container.stats({ stream: false } as const);
 		return stats;
 	}
 }
