@@ -29,10 +29,10 @@ export const DockerStatus: React.FC = () => {
             } else {
                 setDockerInfo({ isConnected: false, error: result.error });
             }
-        } catch (error) {
+        } catch (error: any) {
             setDockerInfo({
                 isConnected: false,
-                error: 'Erreur lors de la vérification de Docker'
+                error: error?.message ?? 'Erreur lors de la vérification de Docker'
             });
         } finally {
             setLoading(false);
