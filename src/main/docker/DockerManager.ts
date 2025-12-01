@@ -8,6 +8,7 @@ export interface DockerInfo {
     containerCount?: number;
     imageCount?: number;
     error?: string;
+    usedHost?: string;
 }
 
 export class DockerManager {
@@ -47,6 +48,7 @@ export class DockerManager {
                 architecture: info.Architecture,
                 containerCount: info.Containers,
                 imageCount: info.Images,
+                usedHost: process.platform === 'win32' ? '//./pipe/docker_engine' : '/var/run/docker.sock',
             };
         } catch (error) {
             console.error('[DockerManager] checkConnection initial error:', error, 'socketPath:', process.platform === 'win32' ? '//./pipe/docker_engine' : '/var/run/docker.sock');
@@ -64,6 +66,7 @@ export class DockerManager {
                     architecture: info.Architecture,
                     containerCount: info.Containers,
                     imageCount: info.Images,
+                    usedHost: process.env.DOCKER_HOST ?? 'default',
                 };
             } catch (err2) {
                 console.error('[DockerManager] fallback connection error:', err2);
