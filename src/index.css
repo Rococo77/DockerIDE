@@ -1153,6 +1153,40 @@ kbd {
     background: rgba(0, 120, 212, 0.1);
 }
 
+.template-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+.framework-badge {
+    background: linear-gradient(135deg, var(--accent-blue), #6b5ce7);
+    color: white;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.template-install-info {
+    margin: 8px 0;
+}
+
+.install-badge {
+    background: rgba(255, 193, 7, 0.2);
+    color: #ffc107;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+}
+
+.template-files .file-tag.more {
+    background: var(--bg-hover);
+    color: var(--text-secondary);
+}
+
 .template-card h3 {
     font-size: 14px;
     margin-bottom: 4px;
