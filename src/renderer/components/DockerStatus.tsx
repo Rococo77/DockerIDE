@@ -40,8 +40,11 @@ export const DockerStatus: React.FC = () => {
     };
 
     const showDiagnostics = async () => {
+        console.log('[DockerStatus] showDiagnostics called');
         if (!window.electronAPI || !window.electronAPI.docker) return;
+        console.log('[DockerStatus] electronAPI present — calling getDiagnostics');
         const res = await window.electronAPI.docker.getDiagnostics();
+        console.log('[DockerStatus] getDiagnostics result', res);
         if (res.success) {
             // show result in console; for now we just log it
             // In future we could render in the UI
