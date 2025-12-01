@@ -53,9 +53,13 @@ const ContainerDashboard: React.FC = () => {
     };
 
     useEffect(() => {
-        refresh();
+        // Initial refresh with small delay to let IPC handlers register
+        const timeout = setTimeout(() => refresh(), 600);
         const interval = setInterval(refresh, 10000);
-        return () => clearInterval(interval);
+        return () => {
+            clearTimeout(timeout);
+            clearInterval(interval);
+        };
     }, []);
 
     const startContainer = async (id: string) => {

@@ -75,10 +75,14 @@ export const DockerStatus: React.FC = () => {
     };
 
     useEffect(() => {
-        checkDocker();
+        // Initial check with small delay to let IPC handlers register
+        const timeout = setTimeout(() => checkDocker(), 500);
         // Vérifier toutes les 30 secondes
         const interval = setInterval(checkDocker, 30000);
-        return () => clearInterval(interval);
+        return () => {
+            clearTimeout(timeout);
+            clearInterval(interval);
+        };
     }, []);
 
     if (loading) {

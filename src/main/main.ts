@@ -35,8 +35,11 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+    // Log about to register handlers
+    console.log('[main] About to register Docker IPC handlers');
     // Enregistrer les handlers IPC
     registerDockerHandlers();
+    console.log('[main] registerDockerHandlers() returned');
     // Warm-up Docker connection on start for debugging purpose in dev
     if (process.env.NODE_ENV !== 'production') {
         DockerManager.getInstance().checkConnection().then(info => {
@@ -47,6 +50,21 @@ app.whenReady().then(() => {
     }
 
     createWindow();
+    // Broadcast to renderer that main is ready and handlers are registered
+    if (mainWindow && mainWindow.webContents) {
+        const sendReady = () => {
+            try {
+                console.log('[main] Sending main:ready to renderer');
+                mainWindow?.webContents.send('main:ready', { handlersRegistered: true });
+            } catch (err) {
+                console.error('[main] Failed to send main:ready:', err);
+            }
+        };
+        // Send on did-finish-load
+        mainWindow.webContents.once('did-finish-load', sendReady);
+        // Also send after dom-ready for HMR scenarios
+        mainWindow.webContents.once('dom-ready', sendReady);
+    }
     // After creating window, log the preload path and whether it exists to help debug preload loading
     const preloadPath = path.join(__dirname, 'preload.js');
     const preloadExists = fs.existsSync(preloadPath);

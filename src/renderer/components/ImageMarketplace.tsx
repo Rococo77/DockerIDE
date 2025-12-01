@@ -29,11 +29,11 @@ const ImageMarketplace: React.FC = () => {
 		if (res && res.success) setImages(res.data);
 	};
 
-	useEffect(() => {
-		fetchImages();
-	}, []);
-
-	const search = async () => {
+    useEffect(() => {
+        // Initial fetch with small delay to let IPC handlers register
+        const timeout = setTimeout(() => fetchImages(), 700);
+        return () => clearTimeout(timeout);
+    }, []);	const search = async () => {
 		if (!term) return;
 		if (!window.electronAPI || !window.electronAPI.docker) return;
 		const res = await window.electronAPI.docker.searchImage(term);
