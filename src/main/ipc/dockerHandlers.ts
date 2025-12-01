@@ -4,6 +4,7 @@ import { ContainerManager } from '../docker/ContainerManager';
 import { ImageManager } from '../docker/ImageManager';
 
 export function registerDockerHandlers() {
+    console.log('[main] registerDockerHandlers() called');
     const dockerManager = DockerManager.getInstance();
     const containerManager = ContainerManager.getInstance();
     const imageManager = ImageManager.getInstance();
