@@ -122,29 +122,43 @@ npm run build
 
 ## 🗺️ Roadmap
 
-### Phase 1 - MVP (En cours)
+### Phase 1 - MVP ✅ Terminé
 - [x] Setup Electron + Vite + TypeScript
-- [ ] Intégration Docker API
-- [ ] Création de projet basique
-- [ ] Éditeur Monaco
-- [ ] Terminal intégré
+- [x] Intégration Docker API (liste des conteneurs/images, actions de base)
+- [x] Éditeur Monaco avec coloration syntaxique
+- [x] Interface VS Code-style (Sidebar, FileExplorer, Tabs)
+- [x] Système de fichiers réel (lecture/écriture)
+- [x] Terminal intégré avec affichage des sorties
+- [x] Exécution de code dans conteneurs Docker
+- [x] Marketplace d'extensions (images Docker par langage)
+- [x] Raccourcis clavier (Ctrl+S, F5)
 
-### Phase 2 - Marketplace
-- [ ] Catalogue d'images
-- [ ] Installation d'images
-- [ ] Templates par langage
-- [ ] Gestion des images
+### Phase 2 - Marketplace ✅ Terminé
+- [x] Catalogue d'images (Python, Node.js, Java, Go, Rust, Ruby, PHP, C/C++)
+- [x] Installation d'images en un clic
+- [x] Indicateur d'images installées
+- [x] Sélection de version par langage
 
-### Phase 3 - Fonctionnalités Avancées
+### Phase 3 - Expérience Développeur ✅ Terminé
+
+- [x] Assistant de création de projet avec choix du langage et template
+- [x] Terminal interactif Docker avec shells multiples (Python, Node, Bash, Ruby)
+- [x] Sélection de shell dynamique dans le terminal
+- [x] Gestion des shells actifs (démarrage/arrêt)
+
+### Phase 4 - En cours 🚧
+
+- [ ] Git intégré (status, commit, push)
 - [ ] Debugging dans conteneur
-- [ ] Extensions
-- [ ] Collaboration en temps réel
-- [ ] Git intégré
 - [ ] Docker Compose support
+- [ ] Multi-fichiers et navigation projet
 
-### Phase 4 - Pédagogie
+### Phase 5 - Fonctionnalités Avancées
+
+- [ ] Extensions personnalisées
+- [ ] Collaboration en temps réel
 - [ ] Tutoriels interactifs
-- [ ] Visualisation de l'architecture
+- [ ] Visualisation de l'architecture Docker
 - [ ] Mode "expert" avec Dockerfiles visibles
 - [ ] Métriques d'apprentissage
 

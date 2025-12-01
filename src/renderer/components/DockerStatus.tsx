@@ -1,0 +1,171 @@
+// src/renderer/components/DockerStatus.tsx
+import React, { useEffect, useState } from 'react';
+
+interface DockerInfo {
+    isConnected: boolean;
+    version?: string;
+    os?: string;
+    architecture?: string;
+    containerCount?: number;
+    imageCount?: number;
+    error?: string;
+}
+
+export const DockerStatus: React.FC = () => {
+    const [dockerInfo, setDockerInfo] = useState<DockerInfo | null>(null);
+    const [loading, setLoading] = useState(true);
+
+    const checkDocker = async () => {
+        setLoading(true);
+        try {
+            if (!window.electronAPI || !window.electronAPI.docker) {
+                setDockerInfo({ isConnected: false, error: 'electronAPI indisponible pour le moment' });
+                return;
+            }
+            // Retry when main handlers are not registered yet (dev hot-reload race)
+            let attempts = 0;
+            let result: any;
+            while (attempts < 6) {
+                try {
+                    result = await window.electronAPI.docker.checkConnection();
+                    break;
+                } catch (err: any) {
+                    const msg = err?.message || String(err);
+                    if (msg.includes('No handler registered') || msg.includes('No handler registered for')) {
+                        attempts += 1;
+                        await new Promise((r) => setTimeout(r, 200));
+                        continue;
+                    }
+                    throw err;
+                }
+            }
+            console.log('[DockerStatus] checkConnection result ->', result);
+            if (result.success) {
+                setDockerInfo(result.data);
+            } else {
+                setDockerInfo({ isConnected: false, error: result.error });
+            }
+        } catch (error: any) {
+            setDockerInfo({
+                isConnected: false,
+                error: error?.message ?? 'Erreur lors de la vérification de Docker'
+            });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const showDiagnostics = async () => {
+        console.log('[DockerStatus] showDiagnostics called');
+        if (!window.electronAPI || !window.electronAPI.docker) {
+            alert('electronAPI non disponible dans le renderer — vérifiez que le preload est chargé et que vous êtes en mode dev.');
+            return;
+        }
+        console.log('[DockerStatus] electronAPI present — calling getDiagnostics');
+        const res = await window.electronAPI.docker.getDiagnostics();
+        console.log('[DockerStatus] getDiagnostics result', res);
+        if (res.success) {
+            // show result in console; for now we just log it
+            // In future we could render in the UI
+            console.log('[Diagnostics]', res.data);
+            alert(`DOCKER_HOST=${res.data.env}\nsocketPath=${res.data.socketPath}\nconnected=${res.data.dockerInfo?.isConnected}\nerror=${res.data.dockerInfo?.error}`);
+        } else {
+            alert('Erreur récupération diagnostics: ' + res.error);
+        }
+    };
+
+    useEffect(() => {
+        // Initial check with small delay to let IPC handlers register
+        const timeout = setTimeout(() => checkDocker(), 500);
+        // Vérifier toutes les 30 secondes
+        const interval = setInterval(checkDocker, 30000);
+        return () => {
+            clearTimeout(timeout);
+            clearInterval(interval);
+        };
+    }, []);
+
+    if (loading) {
+        return (
+            <div className="flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-lg">
+                <div className="w-3 h-3 rounded-full bg-gray-400 animate-pulse" />
+                <span className="text-sm text-gray-600">Vérification de Docker...</span>
+            </div>
+        );
+    }
+
+    if (!dockerInfo?.isConnected) {
+        return (
+            <div className="flex flex-col gap-3 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-red-500" />
+                    <span className="text-sm font-semibold text-red-700">
+            Docker non connecté
+          </span>
+                </div>
+                <div>
+                    <button onClick={showDiagnostics} className="px-2 py-1 text-xs bg-gray-200 rounded">Diag</button>
+                </div>
+                <p className="text-sm text-red-600">{dockerInfo?.error}</p>
+                <button
+                    onClick={checkDocker}
+                    className="self-start px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+                >
+                    Réessayer
+                </button>
+            </div>
+        );
+    }
+
+    return (
+        <div className="flex flex-col gap-3 p-4 bg-green-50 border border-green-200 rounded-lg">
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse" />
+                    <span className="text-sm font-semibold text-green-700">
+            Docker connecté
+          </span>
+                </div>
+                <button
+                    onClick={checkDocker}
+                    className="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                >
+                    Rafraîchir
+                </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                    <span className="text-gray-600">Version:</span>
+                    <span className="ml-2 font-medium text-gray-800">
+            {dockerInfo.version}
+          </span>
+                </div>
+                <div>
+                    <span className="text-gray-600">OS:</span>
+                    <span className="ml-2 font-medium text-gray-800">
+            {dockerInfo.os}
+          </span>
+                </div>
+                <div>
+                    <span className="text-gray-600">Conteneurs:</span>
+                    <span className="ml-2 font-medium text-gray-800">
+            {dockerInfo.containerCount}
+          </span>
+                </div>
+                <div>
+                    <span className="text-gray-600">Images:</span>
+                    <span className="ml-2 font-medium text-gray-800">
+            {dockerInfo.imageCount}
+          </span>
+                </div>
+                {dockerInfo.usedHost && (
+                    <div>
+                        <span className="text-gray-600">Transport:</span>
+                        <span className="ml-2 font-medium text-gray-800">{dockerInfo.usedHost}</span>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
