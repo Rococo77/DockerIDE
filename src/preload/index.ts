@@ -79,6 +79,27 @@ const api = {
         onProgress: (callback: (data: { status: string }) => void) =>
             ipcRenderer.on('runner:progress', (_ev, data) => callback(data)),
     },
+    shell: {
+        // Start an interactive shell
+        start: (config: { shellId: string; image?: string; language?: string; workspacePath?: string }) =>
+            ipcRenderer.invoke('shell:start', config),
+        // Send input to shell
+        write: (shellId: string, data: string) =>
+            ipcRenderer.invoke('shell:write', { shellId, data }),
+        // Stop a shell
+        stop: (shellId: string) => ipcRenderer.invoke('shell:stop', shellId),
+        // List active shells
+        list: () => ipcRenderer.invoke('shell:list'),
+        // Resize shell terminal
+        resize: (shellId: string, cols: number, rows: number) =>
+            ipcRenderer.invoke('shell:resize', { shellId, cols, rows }),
+        // Listen for shell messages
+        onMessage: (callback: (data: { shellId: string; type: string; data: string }) => void) =>
+            ipcRenderer.on('shell:message', (_ev, data) => callback(data)),
+        // Listen for shell close
+        onClosed: (callback: (data: { shellId: string }) => void) =>
+            ipcRenderer.on('shell:closed', (_ev, data) => callback(data)),
+    },
     // Wait for main:ready signal
     whenReady: () => mainReadyPromise,
     onMainReady: (callback: (data?: any) => void) => ipcRenderer.on('main:ready', (_ev, data) => callback(data)),

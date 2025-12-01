@@ -1006,3 +1006,307 @@ kbd {
     color: #ffcc00;
     opacity: 1;
 }
+
+/* ============================================
+   Modal Overlay
+   ============================================ */
+
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    max-width: 700px;
+    width: 90%;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.modal-header h2 {
+    font-size: 16px;
+    font-weight: 500;
+}
+
+.modal-close {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 20px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+.modal-close:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.modal-body {
+    flex: 1;
+    padding: 20px;
+    overflow-y: auto;
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-top: 1px solid var(--border-color);
+    gap: 12px;
+}
+
+.modal-footer-right {
+    display: flex;
+    gap: 8px;
+}
+
+/* ============================================
+   Project Creator Modal
+   ============================================ */
+
+.project-creator {
+    min-height: 400px;
+}
+
+.language-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+}
+
+.language-card {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 16px;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-align: center;
+}
+
+.language-card:hover {
+    border-color: var(--accent-blue);
+    background: var(--bg-hover);
+}
+
+.language-icon {
+    font-size: 32px;
+    display: block;
+    margin-bottom: 8px;
+}
+
+.language-card h3 {
+    font-size: 14px;
+    margin-bottom: 4px;
+}
+
+.language-card p {
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+.template-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.template-card {
+    background: var(--bg-tertiary);
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    padding: 16px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.template-card:hover {
+    border-color: var(--accent-blue);
+}
+
+.template-card.selected {
+    border-color: var(--accent-blue);
+    background: rgba(0, 120, 212, 0.1);
+}
+
+.template-card h3 {
+    font-size: 14px;
+    margin-bottom: 4px;
+}
+
+.template-card p {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+
+.template-files {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.file-tag {
+    background: var(--bg-primary);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-family: monospace;
+    color: var(--accent-green);
+}
+
+.location-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.form-group label {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.form-group input {
+    padding: 10px 12px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-size: 13px;
+}
+
+.form-group input:focus {
+    outline: none;
+    border-color: var(--accent-blue);
+}
+
+.path-input {
+    display: flex;
+    gap: 8px;
+}
+
+.path-input input {
+    flex: 1;
+}
+
+.path-input button {
+    padding: 10px 16px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.path-input button:hover {
+    background: var(--bg-hover);
+}
+
+.project-preview {
+    background: var(--bg-primary);
+    padding: 12px;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+}
+
+.project-preview p {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+}
+
+.project-preview code {
+    font-family: 'Consolas', monospace;
+    color: var(--accent-green);
+}
+
+.form-error {
+    background: rgba(244, 67, 54, 0.1);
+    border: 1px solid var(--error);
+    color: var(--error);
+    padding: 10px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+/* ============================================
+   Shell Picker
+   ============================================ */
+
+.shell-picker {
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    padding: 12px;
+}
+
+.shell-picker-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.shell-picker-options {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.shell-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.shell-option:hover {
+    background: var(--bg-hover);
+    border-color: var(--accent-blue);
+}
+
+.shell-option-icon {
+    font-size: 18px;
+}
+
+.shell-option-name {
+    font-size: 13px;
+    color: var(--text-primary);
+}

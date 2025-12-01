@@ -13,6 +13,7 @@ interface FileExplorerProps {
     selectedFile?: string;
     workspacePath?: string;
     onWorkspaceChange?: (path: string) => void;
+    onNewProject?: () => void;
 }
 
 const FileIcon: React.FC<{ name: string; type: 'file' | 'directory'; expanded?: boolean }> = ({
@@ -116,6 +117,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     selectedFile,
     workspacePath,
     onWorkspaceChange,
+    onNewProject,
 }) => {
     const [fileTree, setFileTree] = useState<FileNode | null>(null);
     const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
@@ -212,7 +214,10 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                 <h3>Explorateur</h3>
                 <div className="no-project">
                     <p>Aucun projet ouvert</p>
-                    <button className="btn btn-primary" onClick={handleOpenFolder}>
+                    <button className="btn btn-primary" onClick={onNewProject}>
+                        ➕ Nouveau projet
+                    </button>
+                    <button className="btn btn-secondary" onClick={handleOpenFolder}>
                         📂 Ouvrir un dossier
                     </button>
                 </div>
@@ -225,6 +230,13 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
             <div className="explorer-header">
                 <h3>Explorateur</h3>
                 <div className="explorer-actions">
+                    <button
+                        title="Nouveau projet"
+                        className="icon-btn"
+                        onClick={onNewProject}
+                    >
+                        ➕
+                    </button>
                     <button
                         title="Ouvrir un dossier"
                         className="icon-btn"

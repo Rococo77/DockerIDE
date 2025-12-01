@@ -18,6 +18,14 @@ export interface TerminalHandle {
     runCode: (filePath: string, language: string) => Promise<void>;
 }
 
+// Available shell options
+const SHELL_OPTIONS = [
+    { id: 'bash', name: 'Bash', icon: '🐚', image: 'alpine:latest' },
+    { id: 'python', name: 'Python', icon: '🐍', image: 'python:3.11-slim' },
+    { id: 'node', name: 'Node.js', icon: '📗', image: 'node:20-alpine' },
+    { id: 'ruby', name: 'Ruby IRB', icon: '💎', image: 'ruby:3.2-slim' },
+];
+
 const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, workspacePath }, ref) => {
     const [lines, setLines] = useState<TerminalLine[]>([
         { type: 'system', content: '🐳 Docker IDE Terminal' },
@@ -25,7 +33,10 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
     ]);
     const [currentInput, setCurrentInput] = useState('');
     const [isRunning, setIsRunning] = useState(false);
-    const [activeTab, setActiveTab] = useState<'terminal' | 'output'>('terminal');
+    const [activeTab, setActiveTab] = useState<'terminal' | 'shell'>('terminal');
+    const [shellActive, setShellActive] = useState(false);
+    const [shellId, setShellId] = useState<string>('');
+    const [showShellPicker, setShowShellPicker] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
     const terminalRef = useRef<HTMLDivElement>(null);
 
@@ -46,7 +57,7 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
         if (visible && inputRef.current) {
             inputRef.current.focus();
         }
-    }, [visible]);
+    }, [visible, activeTab]);
 
     useEffect(() => {
         if (terminalRef.current) {
@@ -62,6 +73,67 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
 
         window.electronAPI?.runner?.onProgress(handleProgress);
     }, []);
+
+    // Listen for shell messages
+    useEffect(() => {
+        const handleMessage = (data: { shellId: string; type: string; data: string }) => {
+            if (data.shellId === shellId) {
+                const lineType = data.type === 'error' ? 'error' : 
+                                data.type === 'system' ? 'system' : 'output';
+                setLines(prev => [...prev, { 
+                    type: lineType as TerminalLine['type'], 
+                    content: data.data 
+                }]);
+            }
+        };
+
+        const handleClosed = (data: { shellId: string }) => {
+            if (data.shellId === shellId) {
+                setShellActive(false);
+                setLines(prev => [...prev, { type: 'system', content: '🔌 Shell Docker fermé' }]);
+            }
+        };
+
+        window.electronAPI?.shell?.onMessage(handleMessage);
+        window.electronAPI?.shell?.onClosed(handleClosed);
+    }, [shellId]);
+
+    // Start interactive shell
+    const startShell = async (shellOption: typeof SHELL_OPTIONS[0]) => {
+        const newShellId = `shell-${Date.now()}`;
+        setShellId(newShellId);
+        setShowShellPicker(false);
+        setLines([{ type: 'system', content: `🐳 Démarrage du shell ${shellOption.name}...` }]);
+
+        try {
+            const result = await window.electronAPI.shell.start({
+                shellId: newShellId,
+                image: shellOption.image,
+                language: shellOption.id,
+                workspacePath,
+            });
+
+            if (result.success) {
+                setShellActive(true);
+                setActiveTab('shell');
+            } else {
+                setLines(prev => [...prev, { 
+                    type: 'error', 
+                    content: result.error || 'Erreur au démarrage du shell' 
+                }]);
+            }
+        } catch (err: any) {
+            setLines(prev => [...prev, { type: 'error', content: err.message }]);
+        }
+    };
+
+    // Stop interactive shell
+    const stopShell = async () => {
+        if (shellId) {
+            await window.electronAPI.shell.stop(shellId);
+            setShellActive(false);
+        }
+    };
 
     const executeInDocker = async (filePath: string, language: string) => {
         if (!workspacePath) {
@@ -129,6 +201,12 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
     const executeCommand = async (cmd: string) => {
         if (!cmd.trim()) return;
 
+        // If shell is active, send to shell
+        if (shellActive && activeTab === 'shell') {
+            await window.electronAPI.shell.write(shellId, cmd);
+            return;
+        }
+
         setLines(prev => [...prev, { type: 'input', content: `$ ${cmd}` }]);
 
         // Built-in commands
@@ -142,11 +220,17 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
                 ...prev,
                 { type: 'system', content: 'Commandes disponibles:' },
                 { type: 'output', content: '  run <file>     - Exécuter un fichier dans Docker' },
+                { type: 'output', content: '  shell          - Ouvrir un shell Docker interactif' },
                 { type: 'output', content: '  clear          - Effacer le terminal' },
                 { type: 'output', content: '  help           - Afficher cette aide' },
                 { type: 'output', content: '' },
                 { type: 'system', content: 'Ou utilisez le bouton "Exécuter" dans l\'éditeur (F5)' },
             ]);
+            return;
+        }
+
+        if (cmd === 'shell') {
+            setShowShellPicker(true);
             return;
         }
 
@@ -193,6 +277,10 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
             executeCommand(currentInput);
             setCurrentInput('');
         }
+        // Ctrl+C to cancel/stop shell
+        if (e.key === 'c' && e.ctrlKey && shellActive) {
+            window.electronAPI.shell.write(shellId, '\x03'); // Send SIGINT
+        }
     };
 
     if (!visible) return null;
@@ -208,13 +296,33 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
                         <span>🐳 Terminal</span>
                     </div>
                     <div
-                        className={`terminal-tab ${activeTab === 'output' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('output')}
+                        className={`terminal-tab ${activeTab === 'shell' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('shell')}
                     >
-                        <span>📤 Sortie</span>
+                        <span>🐚 Shell {shellActive && '●'}</span>
                     </div>
                 </div>
                 <div className="terminal-actions">
+                    {activeTab === 'shell' && (
+                        <>
+                            <button
+                                className="icon-btn"
+                                title="Nouveau shell"
+                                onClick={() => setShowShellPicker(true)}
+                            >
+                                ➕
+                            </button>
+                            {shellActive && (
+                                <button
+                                    className="icon-btn"
+                                    title="Fermer le shell"
+                                    onClick={stopShell}
+                                >
+                                    ⏹️
+                                </button>
+                            )}
+                        </>
+                    )}
                     <button
                         className="icon-btn"
                         title="Effacer"
@@ -225,6 +333,29 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
                     <button className="icon-btn" title="Fermer" onClick={onClose}>×</button>
                 </div>
             </div>
+
+            {/* Shell picker dropdown */}
+            {showShellPicker && (
+                <div className="shell-picker">
+                    <div className="shell-picker-header">
+                        <span>Choisir un shell Docker</span>
+                        <button className="icon-btn" onClick={() => setShowShellPicker(false)}>×</button>
+                    </div>
+                    <div className="shell-picker-options">
+                        {SHELL_OPTIONS.map(option => (
+                            <button
+                                key={option.id}
+                                className="shell-option"
+                                onClick={() => startShell(option)}
+                            >
+                                <span className="shell-option-icon">{option.icon}</span>
+                                <span className="shell-option-name">{option.name}</span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
+
             <div className="terminal-body" ref={terminalRef} onClick={() => inputRef.current?.focus()}>
                 {lines.map((line, i) => (
                     <div key={i} className={`terminal-line ${line.type}`}>
@@ -232,7 +363,7 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
                     </div>
                 ))}
                 <div className="terminal-input-line">
-                    <span className="prompt">$ </span>
+                    <span className="prompt">{shellActive && activeTab === 'shell' ? '> ' : '$ '}</span>
                     <input
                         ref={inputRef}
                         type="text"
@@ -241,7 +372,11 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
                         onChange={(e) => setCurrentInput(e.target.value)}
                         onKeyDown={handleKeyDown}
                         disabled={isRunning}
-                        placeholder={isRunning ? 'Exécution en cours...' : 'Tapez une commande...'}
+                        placeholder={
+                            isRunning ? 'Exécution en cours...' : 
+                            shellActive && activeTab === 'shell' ? 'Entrez une commande shell...' :
+                            'Tapez une commande...'
+                        }
                     />
                 </div>
             </div>

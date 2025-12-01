@@ -5,6 +5,7 @@ import ExtensionsPanel from './components/ide/ExtensionsPanel';
 import Editor from './components/ide/Editor';
 import Terminal, { TerminalHandle } from './components/ide/Terminal';
 import DockerStatusBar from './components/ide/DockerStatusBar';
+import ProjectCreatorModal from './components/ide/ProjectCreatorModal';
 
 type SidebarTab = 'files' | 'extensions' | 'docker';
 
@@ -21,6 +22,7 @@ const App: React.FC = () => {
     const [openFiles, setOpenFiles] = useState<OpenFile[]>([]);
     const [activeFileIndex, setActiveFileIndex] = useState<number>(-1);
     const [terminalVisible, setTerminalVisible] = useState(true);
+    const [showProjectCreator, setShowProjectCreator] = useState(false);
     const terminalRef = useRef<TerminalHandle>(null);
 
     // Get the active file
@@ -129,6 +131,15 @@ const App: React.FC = () => {
         }
     };
 
+    // Handle new project creation
+    const handleProjectCreated = (projectPath: string) => {
+        setWorkspacePath(projectPath);
+        setShowProjectCreator(false);
+        setActiveTab('files');
+        setOpenFiles([]);
+        setActiveFileIndex(-1);
+    };
+
     // Keyboard shortcuts
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -154,6 +165,7 @@ const App: React.FC = () => {
                         selectedFile={activeFile?.path}
                         workspacePath={workspacePath}
                         onWorkspaceChange={setWorkspacePath}
+                        onNewProject={() => setShowProjectCreator(true)}
                     />
                 );
             case 'extensions':
@@ -255,6 +267,13 @@ const App: React.FC = () => {
                     <span className="statusbar-item">Docker IDE v1.0</span>
                 </div>
             </div>
+
+            {/* Modal de création de projet */}
+            <ProjectCreatorModal
+                isOpen={showProjectCreator}
+                onClose={() => setShowProjectCreator(false)}
+                onProjectCreated={handleProjectCreated}
+            />
         </div>
     );
 };
