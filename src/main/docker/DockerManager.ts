@@ -49,6 +49,7 @@ export class DockerManager {
                 imageCount: info.Images,
             };
         } catch (error) {
+            console.error('[DockerManager] checkConnection initial error:', error, 'socketPath:', process.platform === 'win32' ? '//./pipe/docker_engine' : '/var/run/docker.sock');
             // If first attempt fails, try to create a fallback docker client
             try {
                 const fallback = new Docker(); // uses env vars or defaults
@@ -65,6 +66,7 @@ export class DockerManager {
                     imageCount: info.Images,
                 };
             } catch (err2) {
+                console.error('[DockerManager] fallback connection error:', err2);
                 return {
                     isConnected: false,
                     error: this.getErrorMessage(error),

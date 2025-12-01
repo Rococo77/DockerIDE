@@ -14,6 +14,9 @@ export function registerDockerHandlers() {
     ipcMain.handle('docker:check-connection', async () => {
         try {
             const info = await dockerManager.checkConnection();
+            if (!info.isConnected) {
+                console.warn('[docker:check-connection] Docker not connected:', info.error);
+            }
             return { success: true, data: info };
         } catch (error: any) {
             return { success: false, error: error.message };

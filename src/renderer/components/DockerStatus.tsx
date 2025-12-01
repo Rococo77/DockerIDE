@@ -18,6 +18,10 @@ export const DockerStatus: React.FC = () => {
     const checkDocker = async () => {
         setLoading(true);
         try {
+            if (!window.electronAPI || !window.electronAPI.docker) {
+                setDockerInfo({ isConnected: false, error: 'electronAPI indisponible pour le moment' });
+                return;
+            }
             const result = await window.electronAPI.docker.checkConnection();
             if (result.success) {
                 setDockerInfo(result.data);
