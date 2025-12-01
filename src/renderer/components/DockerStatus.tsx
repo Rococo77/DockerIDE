@@ -41,7 +41,10 @@ export const DockerStatus: React.FC = () => {
 
     const showDiagnostics = async () => {
         console.log('[DockerStatus] showDiagnostics called');
-        if (!window.electronAPI || !window.electronAPI.docker) return;
+        if (!window.electronAPI || !window.electronAPI.docker) {
+            alert('electronAPI non disponible dans le renderer — vérifiez que le preload est chargé et que vous êtes en mode dev.');
+            return;
+        }
         console.log('[DockerStatus] electronAPI present — calling getDiagnostics');
         const res = await window.electronAPI.docker.getDiagnostics();
         console.log('[DockerStatus] getDiagnostics result', res);
