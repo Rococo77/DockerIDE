@@ -24,8 +24,23 @@ const ContainerDashboard: React.FC = () => {
                 setImages([]);
                 return;
             }
-            // invoking listContainers
-            const cRes = await window.electronAPI.docker.listContainers(true);
+            // invoking listContainers (retry in dev if handlers not registered yet)
+            let cRes: any;
+            let attempts = 0;
+            while (attempts < 6) {
+                try {
+                    cRes = await window.electronAPI.docker.listContainers(true);
+                    break;
+                } catch (err: any) {
+                    const msg = err?.message || String(err);
+                    if (msg.includes('No handler registered')) {
+                        attempts += 1;
+                        await new Promise((r) => setTimeout(r, 150));
+                        continue;
+                    }
+                    throw err;
+                }
+            }
             if (cRes.success) setContainers(cRes.data as ContainerInfo[]);
             // listContainers result handled
             const iRes = await window.electronAPI.docker.listImages();

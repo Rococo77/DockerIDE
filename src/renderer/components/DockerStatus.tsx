@@ -22,7 +22,23 @@ export const DockerStatus: React.FC = () => {
                 setDockerInfo({ isConnected: false, error: 'electronAPI indisponible pour le moment' });
                 return;
             }
-            const result = await window.electronAPI.docker.checkConnection();
+            // Retry when main handlers are not registered yet (dev hot-reload race)
+            let attempts = 0;
+            let result: any;
+            while (attempts < 6) {
+                try {
+                    result = await window.electronAPI.docker.checkConnection();
+                    break;
+                } catch (err: any) {
+                    const msg = err?.message || String(err);
+                    if (msg.includes('No handler registered') || msg.includes('No handler registered for')) {
+                        attempts += 1;
+                        await new Promise((r) => setTimeout(r, 200));
+                        continue;
+                    }
+                    throw err;
+                }
+            }
             console.log('[DockerStatus] checkConnection result ->', result);
             if (result.success) {
                 setDockerInfo(result.data);

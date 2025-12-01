@@ -9,8 +9,24 @@ const ImageMarketplace: React.FC = () => {
 			setImages([]);
 			return;
 		}
-		const res = await window.electronAPI.docker.listImages();
-		if (res.success) setImages(res.data);
+		// Retry listImages as main handlers may not be registered yet
+		let res: any;
+		let attempts = 0;
+		while (attempts < 6) {
+			try {
+				res = await window.electronAPI.docker.listImages();
+				break;
+			} catch (err: any) {
+				const msg = err?.message || String(err);
+				if (msg.includes('No handler registered')) {
+					attempts += 1;
+					await new Promise((r) => setTimeout(r, 150));
+					continue;
+				}
+				throw err;
+			}
+		}
+		if (res && res.success) setImages(res.data);
 	};
 
 	useEffect(() => {
