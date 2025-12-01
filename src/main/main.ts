@@ -35,12 +35,14 @@ function createWindow() {
 app.whenReady().then(() => {
     // Enregistrer les handlers IPC
     registerDockerHandlers();
-    // Check Docker connection on startup and log
-    DockerManager.getInstance().checkConnection().catch((err) => {
-        if (process.env.NODE_ENV !== 'production') {
-            console.error('[main] Error checking docker', err);
-        }
-    });
+    // Warm-up Docker connection on start for debugging purpose in dev
+    if (process.env.NODE_ENV !== 'production') {
+        DockerManager.getInstance().checkConnection().then(info => {
+            console.log('[main] DockerManager.checkConnection startup ->', info);
+        }).catch(err => {
+            console.error('[main] DockerManager.checkConnection error ->', err);
+        });
+    }
 
     createWindow();
 
