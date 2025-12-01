@@ -117,6 +117,12 @@ export const DockerStatus: React.FC = () => {
             {dockerInfo.imageCount}
           </span>
                 </div>
+                {dockerInfo.usedHost && (
+                    <div>
+                        <span className="text-gray-600">Transport:</span>
+                        <span className="ml-2 font-medium text-gray-800">{dockerInfo.usedHost}</span>
+                    </div>
+                )}
             </div>
         </div>
     );
