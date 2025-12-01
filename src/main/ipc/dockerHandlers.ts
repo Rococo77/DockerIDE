@@ -19,7 +19,8 @@ export function registerDockerHandlers() {
             }
             return { success: true, data: info };
         } catch (error: any) {
-            return { success: false, error: error.message };
+            console.error('[docker:check-connection] handler error:', error);
+            return { success: false, error: error?.message ?? String(error) };
         }
     });
 
@@ -41,7 +42,8 @@ export function registerDockerHandlers() {
             const list = await containerManager.listContainers(all);
             return { success: true, data: list };
         } catch (error: any) {
-            return { success: false, error: error.message };
+            console.error('[container:list] handler error:', error);
+            return { success: false, error: error?.message ?? String(error) };
         }
     });
 
@@ -114,7 +116,8 @@ export function registerDockerHandlers() {
             const images = await imageManager.listImages();
             return { success: true, data: images };
         } catch (error: any) {
-            return { success: false, error: error.message };
+            console.error('[image:list] handler error:', error);
+            return { success: false, error: error?.message ?? String(error) };
         }
     });
 

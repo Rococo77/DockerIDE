@@ -23,6 +23,7 @@ export const DockerStatus: React.FC = () => {
                 return;
             }
             const result = await window.electronAPI.docker.checkConnection();
+            console.log('[DockerStatus] checkConnection result ->', result);
             if (result.success) {
                 setDockerInfo(result.data);
             } else {
