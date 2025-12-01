@@ -1,6 +1,7 @@
 // src/main/main.ts
 import { app, BrowserWindow } from 'electron';
 import path from 'path';
+import fs from 'fs';
 import { registerDockerHandlers } from './ipc/dockerHandlers';
 import { DockerManager } from './docker/DockerManager';
 
@@ -46,6 +47,10 @@ app.whenReady().then(() => {
     }
 
     createWindow();
+    // After creating window, log the preload path and whether it exists to help debug preload loading
+    const preloadPath = path.join(__dirname, 'preload.js');
+    const preloadExists = fs.existsSync(preloadPath);
+    console.log('[main] preload path:', preloadPath, 'exists?', preloadExists);
 
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {
