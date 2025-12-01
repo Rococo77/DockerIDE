@@ -37,9 +37,12 @@ export class DockerManager {
      */
     public async checkConnection(): Promise<DockerInfo> {
         try {
-            // Try with current docker instance
-            const info = await this.docker.info();
-            const version = await this.docker.version();
+            // Prefer default client that respects DOCKER_HOST/env (handles TCP/WSL-relay)
+            const defaultClient = new Docker();
+            const info = await defaultClient.info();
+            const version = await defaultClient.version();
+            // replace instance for further calls
+            this.docker = defaultClient;
 
             return {
                 isConnected: true,
@@ -48,13 +51,16 @@ export class DockerManager {
                 architecture: info.Architecture,
                 containerCount: info.Containers,
                 imageCount: info.Images,
-                usedHost: process.platform === 'win32' ? '//./pipe/docker_engine' : '/var/run/docker.sock',
+                usedHost: process.env.DOCKER_HOST ?? (process.platform === 'win32' ? '//./pipe/docker_engine' : '/var/run/docker.sock'),
             };
         } catch (error) {
             console.error('[DockerManager] checkConnection initial error:', error, 'socketPath:', process.platform === 'win32' ? '//./pipe/docker_engine' : '/var/run/docker.sock');
             // If first attempt fails, try to create a fallback docker client
             try {
-                const fallback = new Docker(); // uses env vars or defaults
+                // Second attempt: try explicit socket path (useful on windows named pipe)
+                const fallback = new Docker({
+                    socketPath: process.platform === 'win32' ? '//./pipe/docker_engine' : '/var/run/docker.sock'
+                });
                 const info = await fallback.info();
                 const version = await fallback.version();
                 // replace instance for further calls
@@ -66,7 +72,7 @@ export class DockerManager {
                     architecture: info.Architecture,
                     containerCount: info.Containers,
                     imageCount: info.Images,
-                    usedHost: process.env.DOCKER_HOST ?? 'default',
+                    usedHost: process.env.DOCKER_HOST ?? (process.platform === 'win32' ? '//./pipe/docker_engine' : '/var/run/docker.sock'),
                 };
             } catch (err2) {
                 console.error('[DockerManager] fallback connection error:', err2);
