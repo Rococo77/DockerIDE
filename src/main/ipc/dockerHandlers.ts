@@ -36,6 +36,18 @@ export function registerDockerHandlers() {
         }
     });
 
+    ipcMain.handle('docker:diagnostics', async () => {
+        try {
+            const env = process.env.DOCKER_HOST ?? null;
+            const socketPath = process.platform === 'win32' ? '//./pipe/docker_engine' : '/var/run/docker.sock';
+            const dockerInfo = await dockerManager.checkConnection();
+            return { success: true, data: { env, socketPath, dockerInfo } };
+        } catch (err: any) {
+            console.error('[docker:diagnostics] handler error:', err);
+            return { success: false, error: err?.message ?? String(err) };
+        }
+    });
+
     // Containers
     ipcMain.handle('container:list', async (_event, all = true) => {
         try {

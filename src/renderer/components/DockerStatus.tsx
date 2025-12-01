@@ -39,6 +39,19 @@ export const DockerStatus: React.FC = () => {
         }
     };
 
+    const showDiagnostics = async () => {
+        if (!window.electronAPI || !window.electronAPI.docker) return;
+        const res = await window.electronAPI.docker.getDiagnostics();
+        if (res.success) {
+            // show result in console; for now we just log it
+            // In future we could render in the UI
+            console.log('[Diagnostics]', res.data);
+            alert(`DOCKER_HOST=${res.data.env}\nsocketPath=${res.data.socketPath}\nconnected=${res.data.dockerInfo?.isConnected}\nerror=${res.data.dockerInfo?.error}`);
+        } else {
+            alert('Erreur récupération diagnostics: ' + res.error);
+        }
+    };
+
     useEffect(() => {
         checkDocker();
         // Vérifier toutes les 30 secondes
@@ -63,6 +76,9 @@ export const DockerStatus: React.FC = () => {
                     <span className="text-sm font-semibold text-red-700">
             Docker non connecté
           </span>
+                </div>
+                <div>
+                    <button onClick={showDiagnostics} className="px-2 py-1 text-xs bg-gray-200 rounded">Diag</button>
                 </div>
                 <p className="text-sm text-red-600">{dockerInfo?.error}</p>
                 <button

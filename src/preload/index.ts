@@ -21,6 +21,8 @@ const api = {
         removeImage: (idOrName: string, opts?: any) => ipcRenderer.invoke('image:remove', idOrName, opts),
         searchImage: (term: string) => ipcRenderer.invoke('image:search', term),
         getImageDetails: (idOrName: string) => ipcRenderer.invoke('image:get-details', idOrName),
+        // Diagnostics
+        getDiagnostics: () => ipcRenderer.invoke('docker:diagnostics'),
     },
 };
 
