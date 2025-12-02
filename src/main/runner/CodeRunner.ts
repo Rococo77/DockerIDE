@@ -289,6 +289,130 @@ export class CodeRunner {
     getSupportedLanguages(): string[] {
         return Object.keys(LANGUAGE_CONFIGS);
     }
+
+    /**
+     * Run framework setup/installation in a Docker container
+     * This runs commands like `composer create-project laravel/laravel .`
+     */
+    async runFrameworkSetup(
+        config: {
+            projectPath: string;
+            image: string;
+            installCommand: string;
+            onOutput?: (data: string) => void;
+            onProgress?: (status: string) => void;
+        }
+    ): Promise<ExecutionResult> {
+        const { projectPath, image, installCommand, onOutput, onProgress } = config;
+        const startTime = Date.now();
+
+        try {
+            // Ensure image is available
+            onProgress?.(`📦 Téléchargement de l'image ${image}...`);
+            const imageReady = await this.ensureImage(image, onProgress);
+            if (!imageReady) {
+                return {
+                    success: false,
+                    output: '',
+                    error: `Impossible de télécharger l'image ${image}`,
+                };
+            }
+
+            const containerName = `docker-ide-setup-${Date.now()}`;
+            onProgress?.('🐳 Création du conteneur d\'installation...');
+
+            // Create container with network access for package downloads
+            const containerConfig = {
+                Image: image,
+                name: containerName,
+                Cmd: ['sh', '-c', installCommand],
+                WorkingDir: '/workspace',
+                HostConfig: {
+                    Binds: [`${projectPath}:/workspace:rw`],
+                    AutoRemove: true,
+                    NetworkMode: 'bridge', // Need network for package downloads
+                    Memory: 1024 * 1024 * 1024, // 1GB limit for framework install
+                    MemorySwap: 1024 * 1024 * 1024,
+                },
+                Tty: true,
+                AttachStdout: true,
+                AttachStderr: true,
+                OpenStdin: false,
+            };
+
+            onProgress?.('⚙️ Installation du framework en cours...');
+            const container = await this.containerManager.createContainer(containerConfig);
+
+            // Collect output
+            let fullOutput = '';
+
+            const stream = await container.attach({
+                stream: true,
+                stdout: true,
+                stderr: true,
+            });
+
+            stream.on('data', (chunk: Buffer) => {
+                let text = chunk.toString('utf-8');
+                // Filter out Docker debug/config output
+                text = text
+                    .replace(/\{[^}]*"stream"[^}]*\}/g, '') // Remove JSON-like config strings
+                    .replace(/\{[^}]*"stdin"[^}]*\}/g, '')
+                    .replace(/\{[^}]*"stdout"[^}]*\}/g, '')
+                    .replace(/\{[^}]*"stderr"[^}]*\}/g, '')
+                    .replace(/\{[^}]*"hijack"[^}]*\}/g, '')
+                    .trim();
+                if (text.length > 0) {
+                    fullOutput += text;
+                    onOutput?.(text);
+                }
+            });
+
+            await container.start();
+
+            // Wait for container to finish (5 min timeout for framework install)
+            const result = await Promise.race([
+                container.wait(),
+                new Promise<{ StatusCode: number }>((_, reject) =>
+                    setTimeout(() => reject(new Error('Timeout')), 300000) // 5 min
+                ),
+            ]);
+
+            const executionTime = Date.now() - startTime;
+
+            if (result.StatusCode === 0) {
+                onProgress?.('✅ Framework installé avec succès!');
+            } else {
+                onProgress?.('❌ Erreur lors de l\'installation');
+            }
+
+            return {
+                success: result.StatusCode === 0,
+                output: fullOutput,
+                exitCode: result.StatusCode,
+                executionTime,
+            };
+
+        } catch (error: any) {
+            const executionTime = Date.now() - startTime;
+
+            if (error.message === 'Timeout') {
+                return {
+                    success: false,
+                    output: '',
+                    error: 'Installation interrompue: temps limite dépassé (5min)',
+                    executionTime,
+                };
+            }
+
+            return {
+                success: false,
+                output: '',
+                error: error.message || 'Erreur inconnue',
+                executionTime,
+            };
+        }
+    }
 }
 
 export default CodeRunner;

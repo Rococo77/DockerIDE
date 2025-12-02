@@ -6,6 +6,7 @@ import Editor from './components/ide/Editor';
 import Terminal, { TerminalHandle } from './components/ide/Terminal';
 import DockerStatusBar from './components/ide/DockerStatusBar';
 import ProjectCreatorModal from './components/ide/ProjectCreatorModal';
+import TitleBar from './components/ide/TitleBar';
 
 type SidebarTab = 'files' | 'extensions' | 'docker';
 
@@ -140,6 +141,40 @@ const App: React.FC = () => {
         setActiveFileIndex(-1);
     };
 
+    // Handle open folder
+    const handleOpenFolder = async () => {
+        try {
+            const result = await window.electronAPI.fs.openFolder();
+            if (result.success && result.path) {
+                setWorkspacePath(result.path);
+                setOpenFiles([]);
+                setActiveFileIndex(-1);
+                setActiveTab('files');
+            }
+        } catch (err) {
+            console.error('Error opening folder:', err);
+        }
+    };
+
+    // Get project name from workspace path
+    const projectName = workspacePath 
+        ? workspacePath.split(/[/\\]/).pop() 
+        : undefined;
+
+    // Auto-connect terminal to container when workspace changes
+    useEffect(() => {
+        if (workspacePath && terminalRef.current) {
+            // Small delay to ensure terminal is ready
+            const timer = setTimeout(() => {
+                if (!terminalRef.current?.isShellActive()) {
+                    setTerminalVisible(true);
+                    terminalRef.current?.connectToProject();
+                }
+            }, 500);
+            return () => clearTimeout(timer);
+        }
+    }, [workspacePath]);
+
     // Keyboard shortcuts
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -150,6 +185,16 @@ const App: React.FC = () => {
             if (e.key === 'F5') {
                 e.preventDefault();
                 handleRunCode();
+            }
+            // Ctrl+Shift+N = Nouveau Projet
+            if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'N') {
+                e.preventDefault();
+                setShowProjectCreator(true);
+            }
+            // Ctrl+O = Ouvrir Dossier
+            if ((e.ctrlKey || e.metaKey) && e.key === 'o') {
+                e.preventDefault();
+                handleOpenFolder();
             }
         };
         window.addEventListener('keydown', handleKeyDown);
@@ -190,6 +235,13 @@ const App: React.FC = () => {
 
     return (
         <div className="ide-container">
+            {/* Barre de titre */}
+            <TitleBar 
+                projectName={projectName}
+                onNewProject={() => setShowProjectCreator(true)}
+                onOpenFolder={handleOpenFolder}
+            />
+
             {/* Barre latérale d'icônes */}
             <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
 

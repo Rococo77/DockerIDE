@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 interface ProjectCreatorProps {
     isOpen: boolean;
@@ -23,6 +23,8 @@ interface ProjectTemplate {
     requiresInstall?: boolean;
     installCommand?: string;
     startCommand?: string;
+    setupImage?: string; // Image spécifique pour l'installation (ex: composer pour PHP)
+    ports?: number[];
     files: { path: string; content: string }[];
 }
 
@@ -66,15 +68,18 @@ echo "Nombres doublés: " . implode(", ", $doubled) . "\\n";
                 description: 'Application Laravel complète',
                 framework: 'Laravel',
                 requiresInstall: true,
-                installCommand: 'composer create-project laravel/laravel . && php artisan key:generate',
+                setupImage: 'composer:latest',
+                installCommand: 'composer create-project laravel/laravel . --prefer-dist --no-interaction && php artisan key:generate',
                 startCommand: 'php artisan serve --host=0.0.0.0 --port=8000',
+                ports: [8000],
                 files: [
                     {
                         path: '.docker-ide.json',
                         content: JSON.stringify({
                             framework: 'laravel',
                             image: 'php:8.2-cli',
-                            installCommand: 'composer create-project laravel/laravel . && php artisan key:generate',
+                            setupImage: 'composer:latest',
+                            installCommand: 'composer create-project laravel/laravel . --prefer-dist --no-interaction && php artisan key:generate',
                             startCommand: 'php artisan serve --host=0.0.0.0 --port=8000',
                             ports: [8000],
                         }, null, 2),
@@ -111,15 +116,18 @@ php artisan serve --host=0.0.0.0 --port=8000
                 description: 'Application Symfony 7',
                 framework: 'Symfony',
                 requiresInstall: true,
-                installCommand: 'composer create-project symfony/skeleton . && composer require webapp',
-                startCommand: 'symfony server:start --no-tls --allow-http',
+                setupImage: 'composer:latest',
+                installCommand: 'composer create-project symfony/skeleton . --prefer-dist --no-interaction && composer require webapp --no-interaction',
+                startCommand: 'php -S 0.0.0.0:8000 -t public',
+                ports: [8000],
                 files: [
                     {
                         path: '.docker-ide.json',
                         content: JSON.stringify({
                             framework: 'symfony',
                             image: 'php:8.2-cli',
-                            installCommand: 'composer create-project symfony/skeleton . && composer require webapp',
+                            setupImage: 'composer:latest',
+                            installCommand: 'composer create-project symfony/skeleton . --prefer-dist --no-interaction && composer require webapp --no-interaction',
                             startCommand: 'php -S 0.0.0.0:8000 -t public',
                             ports: [8000],
                         }, null, 2),
@@ -1285,13 +1293,46 @@ const ProjectCreatorModal: React.FC<ProjectCreatorProps> = ({
     onClose,
     onProjectCreated,
 }) => {
-    const [step, setStep] = useState<'language' | 'template' | 'location'>('language');
+    const [step, setStep] = useState<'language' | 'template' | 'location' | 'installing'>('language');
     const [projectName, setProjectName] = useState('mon-projet');
     const [selectedLanguage, setSelectedLanguage] = useState<LanguageTemplate | null>(null);
     const [selectedTemplate, setSelectedTemplate] = useState<ProjectTemplate | null>(null);
     const [projectPath, setProjectPath] = useState('');
     const [isCreating, setIsCreating] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    
+    // Installation state
+    const [installProgress, setInstallProgress] = useState('');
+    const [installOutput, setInstallOutput] = useState<string[]>([]);
+    const [installComplete, setInstallComplete] = useState(false);
+    const [installError, setInstallError] = useState<string | null>(null);
+    const outputRef = useRef<HTMLDivElement>(null);
+
+    // Listen for installation events
+    useEffect(() => {
+        const handleProgress = (data: { status: string }) => {
+            setInstallProgress(data.status);
+        };
+
+        const handleOutput = (data: { data: string }) => {
+            setInstallOutput(prev => [...prev, data.data]);
+        };
+
+        const cleanupProgress = window.electronAPI.runner.onSetupProgress(handleProgress);
+        const cleanupOutput = window.electronAPI.runner.onSetupOutput(handleOutput);
+
+        return () => {
+            cleanupProgress?.();
+            cleanupOutput?.();
+        };
+    }, []);
+
+    // Auto-scroll output
+    useEffect(() => {
+        if (outputRef.current) {
+            outputRef.current.scrollTop = outputRef.current.scrollHeight;
+        }
+    }, [installOutput]);
 
     const handleSelectLanguage = (lang: LanguageTemplate) => {
         setSelectedLanguage(lang);
@@ -1329,24 +1370,84 @@ const ProjectCreatorModal: React.FC<ProjectCreatorProps> = ({
             const fullProjectPath = `${projectPath}/${projectName}`;
             await window.electronAPI.fs.createDirectory(fullProjectPath);
 
-            // Create template files
-            for (const file of selectedTemplate.files) {
-                const filePath = `${fullProjectPath}/${file.path}`;
-                await window.electronAPI.fs.writeFile(filePath, file.content);
-            }
+            // If framework requires installation, DON'T create files before (Composer needs empty dir)
+            if (selectedTemplate.requiresInstall && selectedTemplate.installCommand) {
+                // Switch to installation step
+                setStep('installing');
+                setInstallOutput([]);
+                setInstallProgress('🚀 Démarrage de l\'installation...');
+                setInstallComplete(false);
+                setInstallError(null);
 
-            // Check if Docker image is available
-            const langConfig = await window.electronAPI.runner.getLanguageConfig(selectedLanguage.id);
-            if (langConfig.success) {
-                const imageCheck = await window.electronAPI.runner.checkImage(langConfig.image);
-                if (!imageCheck.available) {
-                    // Pull image in background
-                    window.electronAPI.runner.ensureImage(langConfig.image);
+                // Determine which image to use for setup
+                const setupImage = selectedTemplate.setupImage || selectedLanguage.image;
+
+                try {
+                    const result = await window.electronAPI.runner.setupFramework({
+                        projectPath: fullProjectPath,
+                        image: setupImage,
+                        installCommand: selectedTemplate.installCommand,
+                    });
+
+                    if (result.success) {
+                        // Now create template files AFTER successful installation
+                        setInstallProgress('📝 Ajout des fichiers de configuration...');
+                        for (const file of selectedTemplate.files) {
+                            const filePath = `${fullProjectPath}/${file.path}`;
+                            await window.electronAPI.fs.writeFile(filePath, file.content);
+                        }
+
+                        // Always create/update .docker-ide.json with language info
+                        const dockerIdeConfig = {
+                            language: selectedLanguage.id,
+                            image: selectedLanguage.image,
+                            framework: selectedTemplate.framework || null,
+                            template: selectedTemplate.id,
+                            createdAt: new Date().toISOString(),
+                        };
+                        await window.electronAPI.fs.writeFile(
+                            `${fullProjectPath}/.docker-ide.json`,
+                            JSON.stringify(dockerIdeConfig, null, 2)
+                        );
+
+                        setInstallComplete(true);
+                        setInstallProgress('✅ Installation terminée avec succès!');
+                        // Wait a bit then open project
+                        setTimeout(() => {
+                            onProjectCreated(fullProjectPath);
+                            handleClose();
+                        }, 1500);
+                    } else {
+                        setInstallError(result.error || 'Erreur lors de l\'installation');
+                        setInstallProgress('❌ Échec de l\'installation');
+                    }
+                } catch (err: any) {
+                    setInstallError(err.message);
+                    setInstallProgress('❌ Erreur inattendue');
                 }
-            }
+            } else {
+                // No installation needed, create template files first
+                for (const file of selectedTemplate.files) {
+                    const filePath = `${fullProjectPath}/${file.path}`;
+                    await window.electronAPI.fs.writeFile(filePath, file.content);
+                }
 
-            onProjectCreated(fullProjectPath);
-            handleClose();
+                // Always create .docker-ide.json with language info
+                const dockerIdeConfig = {
+                    language: selectedLanguage.id,
+                    image: selectedLanguage.image,
+                    framework: selectedTemplate.framework || null,
+                    template: selectedTemplate.id,
+                    createdAt: new Date().toISOString(),
+                };
+                await window.electronAPI.fs.writeFile(
+                    `${fullProjectPath}/.docker-ide.json`,
+                    JSON.stringify(dockerIdeConfig, null, 2)
+                );
+
+                onProjectCreated(fullProjectPath);
+                handleClose();
+            }
         } catch (err: any) {
             setError(err.message || 'Erreur lors de la création du projet');
         } finally {
@@ -1361,6 +1462,10 @@ const ProjectCreatorModal: React.FC<ProjectCreatorProps> = ({
         setSelectedTemplate(null);
         setProjectPath('');
         setError(null);
+        setInstallOutput([]);
+        setInstallProgress('');
+        setInstallComplete(false);
+        setInstallError(null);
         onClose();
     };
 
@@ -1471,28 +1576,92 @@ const ProjectCreatorModal: React.FC<ProjectCreatorProps> = ({
                                     <code>{projectPath}/{projectName}</code>
                                 </div>
                             )}
+                            {selectedTemplate?.requiresInstall && (
+                                <div className="install-notice-box">
+                                    <span className="install-icon">📦</span>
+                                    <div className="install-info">
+                                        <strong>Installation automatique</strong>
+                                        <p>Les dépendances du framework {selectedTemplate.framework} seront installées automatiquement via Docker.</p>
+                                        <code>{selectedTemplate.installCommand}</code>
+                                    </div>
+                                </div>
+                            )}
                             {error && <div className="form-error">{error}</div>}
+                        </div>
+                    )}
+
+                    {/* Step 4: Installation Progress */}
+                    {step === 'installing' && (
+                        <div className="installation-progress">
+                            <div className="install-header">
+                                <span className="install-spinner">{installComplete ? '✅' : '⚙️'}</span>
+                                <h3>{installProgress}</h3>
+                            </div>
+                            
+                            <div className="install-output" ref={outputRef}>
+                                {installOutput.map((line, idx) => (
+                                    <div key={idx} className="output-line">{line}</div>
+                                ))}
+                                {installOutput.length === 0 && !installError && (
+                                    <div className="output-placeholder">
+                                        En attente de la sortie...
+                                    </div>
+                                )}
+                            </div>
+
+                            {installError && (
+                                <div className="install-error">
+                                    <strong>❌ Erreur:</strong> {installError}
+                                    <button 
+                                        className="btn btn-secondary btn-small"
+                                        onClick={() => {
+                                            setStep('location');
+                                            setInstallError(null);
+                                        }}
+                                    >
+                                        Réessayer
+                                    </button>
+                                </div>
+                            )}
+
+                            {installComplete && (
+                                <div className="install-success">
+                                    <p>🎉 Votre projet {selectedTemplate?.framework} est prêt!</p>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
 
                 <div className="modal-footer">
-                    {step !== 'language' && (
+                    {step !== 'language' && step !== 'installing' && (
                         <button className="btn btn-secondary" onClick={handleBack}>
                             ← Retour
                         </button>
                     )}
                     <div className="modal-footer-right">
-                        <button className="btn btn-secondary" onClick={handleClose}>
-                            Annuler
-                        </button>
+                        {step !== 'installing' && (
+                            <button className="btn btn-secondary" onClick={handleClose}>
+                                Annuler
+                            </button>
+                        )}
                         {step === 'location' && (
                             <button
                                 className="btn btn-primary"
                                 onClick={handleCreateProject}
                                 disabled={isCreating || !projectPath || !projectName}
                             >
-                                {isCreating ? 'Création...' : '✨ Créer le projet'}
+                                {isCreating ? 'Création...' : selectedTemplate?.requiresInstall ? '🚀 Créer & Installer' : '✨ Créer le projet'}
+                            </button>
+                        )}
+                        {step === 'installing' && installComplete && (
+                            <button className="btn btn-primary" onClick={handleClose}>
+                                Fermer
+                            </button>
+                        )}
+                        {step === 'installing' && installError && (
+                            <button className="btn btn-secondary" onClick={handleClose}>
+                                Fermer
                             </button>
                         )}
                     </div>

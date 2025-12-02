@@ -16,6 +16,8 @@ export interface TerminalHandle {
     addLine: (type: TerminalLine['type'], content: string) => void;
     clear: () => void;
     runCode: (filePath: string, language: string) => Promise<void>;
+    connectToProject: () => Promise<void>;
+    isShellActive: () => boolean;
 }
 
 // Available shell options
@@ -40,6 +42,79 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
     const inputRef = useRef<HTMLInputElement>(null);
     const terminalRef = useRef<HTMLDivElement>(null);
 
+    // Connect to project container (auto-connect on project open)
+    const connectToProject = async () => {
+        if (shellActive || !workspacePath) return;
+        
+        const newShellId = `shell-${Date.now()}`;
+        setShellId(newShellId);
+        setLines([
+            { type: 'system', content: '🐳 Docker IDE Terminal' },
+            { type: 'system', content: `📂 Projet: ${workspacePath}` },
+            { type: 'system', content: `🔌 Détection de la configuration...` },
+        ]);
+
+        try {
+            // Try to read .docker-ide.json to get project config
+            let projectImage = 'alpine:latest'; // Default fallback
+            let projectLanguage = 'bash';
+            
+            try {
+                const configPath = `${workspacePath}/.docker-ide.json`;
+                const configResult = await window.electronAPI.fs.readFile(configPath);
+                if (configResult.success && configResult.content) {
+                    const config = JSON.parse(configResult.content);
+                    if (config.image) {
+                        projectImage = config.image;
+                    }
+                    if (config.language) {
+                        projectLanguage = config.language;
+                    }
+                    if (config.framework) {
+                        setLines(prev => [...prev, { 
+                            type: 'system', 
+                            content: `🎯 Framework détecté: ${config.framework}` 
+                        }]);
+                    }
+                }
+            } catch {
+                // No config file, try to detect from files
+                setLines(prev => [...prev, { 
+                    type: 'system', 
+                    content: '📦 Pas de config .docker-ide.json, utilisation de l\'image par défaut' 
+                }]);
+            }
+
+            setLines(prev => [...prev, { 
+                type: 'system', 
+                content: `🐳 Image: ${projectImage}` 
+            }]);
+
+            const result = await window.electronAPI.shell.start({
+                shellId: newShellId,
+                image: projectImage,
+                language: projectLanguage,
+                workspacePath,
+            });
+
+            if (result.success) {
+                setShellActive(true);
+                setActiveTab('shell');
+                setLines(prev => [...prev, { 
+                    type: 'success', 
+                    content: '✅ Connecté au conteneur Docker' 
+                }]);
+            } else {
+                setLines(prev => [...prev, { 
+                    type: 'error', 
+                    content: result.error || 'Erreur de connexion au conteneur' 
+                }]);
+            }
+        } catch (err: any) {
+            setLines(prev => [...prev, { type: 'error', content: err.message }]);
+        }
+    };
+
     // Expose methods via ref
     useImperativeHandle(ref, () => ({
         addLine: (type: TerminalLine['type'], content: string) => {
@@ -51,7 +126,9 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
         runCode: async (filePath: string, language: string) => {
             await executeInDocker(filePath, language);
         },
-    }));
+        connectToProject,
+        isShellActive: () => shellActive,
+    }), [shellActive, workspacePath]);
 
     useEffect(() => {
         if (visible && inputRef.current) {
@@ -71,7 +148,8 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
             setLines(prev => [...prev, { type: 'system', content: data.status }]);
         };
 
-        window.electronAPI?.runner?.onProgress(handleProgress);
+        const cleanup = window.electronAPI?.runner?.onProgress(handleProgress);
+        return () => cleanup?.();
     }, []);
 
     // Listen for shell messages
@@ -94,8 +172,13 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
             }
         };
 
-        window.electronAPI?.shell?.onMessage(handleMessage);
-        window.electronAPI?.shell?.onClosed(handleClosed);
+        const cleanupMessage = window.electronAPI?.shell?.onMessage(handleMessage);
+        const cleanupClosed = window.electronAPI?.shell?.onClosed(handleClosed);
+
+        return () => {
+            cleanupMessage?.();
+            cleanupClosed?.();
+        };
     }, [shellId]);
 
     // Start interactive shell
@@ -203,6 +286,8 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
 
         // If shell is active, send to shell
         if (shellActive && activeTab === 'shell') {
+            // Show the command we're sending
+            setLines(prev => [...prev, { type: 'input', content: `$ ${cmd}` }]);
             await window.electronAPI.shell.write(shellId, cmd);
             return;
         }

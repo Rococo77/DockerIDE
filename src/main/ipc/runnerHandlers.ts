@@ -182,5 +182,52 @@ export function registerRunnerHandlers(): void {
         }
     });
 
+    // ===================================
+    // Framework Setup Handler
+    // ===================================
+
+    // Run framework installation
+    ipcMain.handle('runner:setup-framework', async (event, config: {
+        projectPath: string;
+        image: string;
+        installCommand: string;
+    }) => {
+        try {
+            const mainWindow = BrowserWindow.getAllWindows()[0];
+
+            // Progress callback
+            const onProgress = (status: string) => {
+                mainWindow?.webContents.send('runner:setup-progress', { 
+                    status,
+                    type: 'progress'
+                });
+            };
+
+            // Output callback - send real-time output
+            const onOutput = (data: string) => {
+                mainWindow?.webContents.send('runner:setup-output', { 
+                    data,
+                    type: 'output'
+                });
+            };
+
+            const result = await runner.runFrameworkSetup({
+                projectPath: config.projectPath,
+                image: config.image,
+                installCommand: config.installCommand,
+                onOutput,
+                onProgress,
+            });
+
+            return result;
+        } catch (error: any) {
+            return {
+                success: false,
+                output: '',
+                error: error.message,
+            };
+        }
+    });
+
     console.log('[Runner] Code runner IPC handlers registered');
 }
