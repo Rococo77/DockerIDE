@@ -63,7 +63,7 @@ export function registerDockerHandlers() {
     ipcMain.handle('container:create', async (_event, config) => {
         try {
             const container = await containerManager.createContainer(config);
-            return { success: true, data: container.id || container.id };
+            return { success: true, data: container.id };
         } catch (error: any) {
             return { success: false, error: error.message };
         }

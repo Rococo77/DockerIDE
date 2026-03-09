@@ -331,14 +331,10 @@ export class ProjectContainerManager extends EventEmitter {
 
                         const payload = chunk.slice(offset, offset + size).toString('utf-8');
                         
-                        if (streamType === 1) {
-                            stdout += payload;
-                            config?.onOutput?.(payload, 'stdout');
-                        } else if (streamType === 2) {
+                        if (streamType === 2) {
                             stderr += payload;
                             config?.onOutput?.(payload, 'stderr');
                         } else {
-                            // Unknown stream type, treat as stdout
                             stdout += payload;
                             config?.onOutput?.(payload, 'stdout');
                         }
