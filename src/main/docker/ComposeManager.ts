@@ -1,4 +1,4 @@
-import { exec, spawn, ChildProcess } from 'child_process';
+import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -194,6 +194,14 @@ export class ComposeManager {
 
             let stdout = '';
             let stderr = '';
+            let resolved = false;
+
+            const safeResolve = (result: ComposeResult) => {
+                if (!resolved) {
+                    resolved = true;
+                    resolve(result);
+                }
+            };
 
             proc.stdout?.on('data', (data: Buffer) => {
                 stdout += data.toString();
@@ -204,7 +212,7 @@ export class ComposeManager {
             });
 
             proc.on('close', (code) => {
-                resolve({
+                safeResolve({
                     success: code === 0,
                     output: stdout,
                     error: stderr || undefined,
@@ -212,7 +220,7 @@ export class ComposeManager {
             });
 
             proc.on('error', (err) => {
-                resolve({
+                safeResolve({
                     success: false,
                     output: '',
                     error: err.message,
@@ -221,12 +229,14 @@ export class ComposeManager {
 
             // Timeout after 2 minutes
             setTimeout(() => {
-                proc.kill();
-                resolve({
-                    success: false,
-                    output: stdout,
-                    error: 'Command timed out',
-                });
+                if (!resolved) {
+                    proc.kill();
+                    safeResolve({
+                        success: false,
+                        output: stdout,
+                        error: 'Command timed out',
+                    });
+                }
             }, 120000);
         });
     }

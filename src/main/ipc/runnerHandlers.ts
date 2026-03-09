@@ -1,6 +1,6 @@
 import { ipcMain, BrowserWindow } from 'electron';
 import { CodeRunner } from '../runner/CodeRunner';
-import { ShellManager, InteractiveShell } from '../runner/InteractiveShell';
+import { ShellManager } from '../runner/InteractiveShell';
 import { ComposeManager } from '../docker/ComposeManager';
 
 export function registerRunnerHandlers(): void {
@@ -10,7 +10,7 @@ export function registerRunnerHandlers(): void {
     console.log('[Runner] Registering code runner IPC handlers...');
 
     // Run code
-    ipcMain.handle('runner:run', async (event, config: {
+    ipcMain.handle('runner:run', async (_event, config: {
         filePath: string;
         workspacePath: string;
         language: string;
@@ -63,7 +63,7 @@ export function registerRunnerHandlers(): void {
     });
 
     // Ensure image is pulled
-    ipcMain.handle('runner:ensure-image', async (event, imageName: string) => {
+    ipcMain.handle('runner:ensure-image', async (_event, imageName: string) => {
         try {
             const mainWindow = BrowserWindow.getAllWindows()[0];
             const onProgress = (status: string) => {
@@ -82,7 +82,7 @@ export function registerRunnerHandlers(): void {
     // ===================================
 
     // Start an interactive shell
-    ipcMain.handle('shell:start', async (event, config: {
+    ipcMain.handle('shell:start', async (_event, config: {
         shellId: string;
         image?: string;
         language?: string;
@@ -188,7 +188,7 @@ export function registerRunnerHandlers(): void {
     // ===================================
 
     // Run framework installation
-    ipcMain.handle('runner:setup-framework', async (event, config: {
+    ipcMain.handle('runner:setup-framework', async (_event, config: {
         projectPath: string;
         image: string;
         installCommand: string;

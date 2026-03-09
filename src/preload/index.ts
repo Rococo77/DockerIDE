@@ -3,13 +3,9 @@ import { contextBridge, ipcRenderer } from 'electron';
 console.log('[preload] preload script running — exposing electronAPI');
 
 // Promise that resolves when main signals it's ready (handlers registered)
-let _mainReadyResolved = false;
 let _mainReadyResolver: ((data?: any) => void) | null = null;
 const mainReadyPromise = new Promise<any>((resolve) => {
-    _mainReadyResolver = (data: any) => {
-        _mainReadyResolved = true;
-        resolve(data);
-    };
+    _mainReadyResolver = resolve;
 });
 
 // Listen for main ready event
