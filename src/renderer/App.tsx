@@ -218,8 +218,8 @@ const App: React.FC = () => {
             case 'docker':
                 return (
                     <div className="docker-panel">
-                        <h3>🐳 Docker</h3>
-                        <p className="text-muted">Gestion des conteneurs</p>
+                        <h3>Docker</h3>
+                        <p className="text-muted">Container management</p>
                         <div className="docker-section">
                             <h4>Conteneurs actifs</h4>
                             <div className="empty-state">

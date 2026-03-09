@@ -24,11 +24,13 @@ const TitleBar: React.FC<TitleBarProps> = ({ projectName, onNewProject, onOpenFo
     return (
         <div className="title-bar">
             <div className="title-bar-left">
-                <div className="app-icon">🐳</div>
-                
+                <div className="app-icon">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0db7ed" strokeWidth="1.5"><rect x="1" y="11" width="4" height="4" rx=".5"/><rect x="6" y="11" width="4" height="4" rx=".5"/><rect x="11" y="11" width="4" height="4" rx=".5"/><rect x="6" y="6" width="4" height="4" rx=".5"/><rect x="11" y="6" width="4" height="4" rx=".5"/><rect x="16" y="11" width="4" height="4" rx=".5"/><rect x="11" y="1" width="4" height="4" rx=".5"/><path d="M1 17c4 4 16 4 22-1"/></svg>
+                </div>
+
                 {/* Menu Fichier */}
                 <div className="menu-container">
-                    <button 
+                    <button
                         className="menu-button"
                         onClick={() => setShowFileMenu(!showFileMenu)}
                         onBlur={() => setTimeout(() => setShowFileMenu(false), 150)}
@@ -38,18 +40,15 @@ const TitleBar: React.FC<TitleBarProps> = ({ projectName, onNewProject, onOpenFo
                     {showFileMenu && (
                         <div className="menu-dropdown">
                             <button className="menu-item" onClick={() => { onNewProject(); setShowFileMenu(false); }}>
-                                <span className="menu-icon">📁</span>
                                 <span>Nouveau Projet...</span>
                                 <span className="menu-shortcut">Ctrl+Shift+N</span>
                             </button>
                             <button className="menu-item" onClick={() => { onOpenFolder(); setShowFileMenu(false); }}>
-                                <span className="menu-icon">📂</span>
                                 <span>Ouvrir un dossier...</span>
                                 <span className="menu-shortcut">Ctrl+O</span>
                             </button>
                             <div className="menu-separator" />
                             <button className="menu-item" onClick={handleClose}>
-                                <span className="menu-icon">🚪</span>
                                 <span>Quitter</span>
                                 <span className="menu-shortcut">Alt+F4</span>
                             </button>
@@ -69,9 +68,9 @@ const TitleBar: React.FC<TitleBarProps> = ({ projectName, onNewProject, onOpenFo
                     <span>+ Nouveau Projet</span>
                 </button>
                 <div className="window-controls">
-                    <button className="window-btn minimize" onClick={handleMinimize}>─</button>
-                    <button className="window-btn maximize" onClick={handleMaximize}>□</button>
-                    <button className="window-btn close" onClick={handleClose}>×</button>
+                    <button className="window-btn minimize" onClick={handleMinimize}>&#x2500;</button>
+                    <button className="window-btn maximize" onClick={handleMaximize}>&#x25A1;</button>
+                    <button className="window-btn close" onClick={handleClose}>&#x2715;</button>
                 </div>
             </div>
         </div>

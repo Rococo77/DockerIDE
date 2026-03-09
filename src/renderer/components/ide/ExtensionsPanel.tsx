@@ -16,8 +16,8 @@ const AVAILABLE_IMAGES: LanguageImage[] = [
     {
         id: 'python',
         name: 'Python',
-        description: 'Langage polyvalent idéal pour débuter',
-        icon: '🐍',
+        description: 'General-purpose language, great for beginners',
+        icon: 'PY',
         versions: ['3.12', '3.11', '3.10', '3.9'],
         installed: false,
         category: 'language',
@@ -25,8 +25,8 @@ const AVAILABLE_IMAGES: LanguageImage[] = [
     {
         id: 'node',
         name: 'Node.js',
-        description: 'JavaScript côté serveur',
-        icon: '🟢',
+        description: 'Server-side JavaScript runtime',
+        icon: 'JS',
         versions: ['22', '20-lts', '18-lts'],
         installed: false,
         category: 'language',
@@ -34,8 +34,8 @@ const AVAILABLE_IMAGES: LanguageImage[] = [
     {
         id: 'openjdk',
         name: 'Java (OpenJDK)',
-        description: 'Langage orienté objet robuste',
-        icon: '☕',
+        description: 'Robust object-oriented language',
+        icon: 'JV',
         versions: ['21', '17', '11'],
         installed: false,
         category: 'language',
@@ -43,8 +43,8 @@ const AVAILABLE_IMAGES: LanguageImage[] = [
     {
         id: 'golang',
         name: 'Go',
-        description: 'Langage moderne et performant',
-        icon: '🐹',
+        description: 'Fast, modern compiled language',
+        icon: 'GO',
         versions: ['1.22', '1.21', '1.20'],
         installed: false,
         category: 'language',
@@ -52,8 +52,8 @@ const AVAILABLE_IMAGES: LanguageImage[] = [
     {
         id: 'rust',
         name: 'Rust',
-        description: 'Langage système sûr et performant',
-        icon: '🦀',
+        description: 'Systems language with safety guarantees',
+        icon: 'RS',
         versions: ['latest', '1.75', '1.74'],
         installed: false,
         category: 'language',
@@ -61,8 +61,8 @@ const AVAILABLE_IMAGES: LanguageImage[] = [
     {
         id: 'gcc',
         name: 'C/C++ (GCC)',
-        description: 'Compilateur C/C++ GNU',
-        icon: '⚡',
+        description: 'GNU C/C++ compiler toolchain',
+        icon: 'C+',
         versions: ['14', '13', '12'],
         installed: false,
         category: 'language',
@@ -70,8 +70,8 @@ const AVAILABLE_IMAGES: LanguageImage[] = [
     {
         id: 'ruby',
         name: 'Ruby',
-        description: 'Langage élégant et productif',
-        icon: '💎',
+        description: 'Elegant and productive language',
+        icon: 'RB',
         versions: ['3.3', '3.2', '3.1'],
         installed: false,
         category: 'language',
@@ -79,8 +79,8 @@ const AVAILABLE_IMAGES: LanguageImage[] = [
     {
         id: 'php',
         name: 'PHP',
-        description: 'Langage web populaire',
-        icon: '🐘',
+        description: 'Popular web development language',
+        icon: 'HP',
         versions: ['8.3', '8.2', '8.1'],
         installed: false,
         category: 'language',
@@ -186,7 +186,7 @@ const ExtensionsPanel: React.FC = () => {
             <div className="search-box">
                 <input
                     type="text"
-                    placeholder="🔍 Rechercher un langage..."
+                    placeholder="Search languages..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="search-input"
@@ -218,7 +218,7 @@ const ExtensionsPanel: React.FC = () => {
 
                 {(activeSection === 'installed' ? installedList : availableList).map((img) => (
                     <div key={img.id} className="extension-card">
-                        <div className="extension-icon">{img.icon}</div>
+                        <div className="extension-icon extension-icon-text">{img.icon}</div>
                         <div className="extension-info">
                             <div className="extension-name">
                                 {img.name}

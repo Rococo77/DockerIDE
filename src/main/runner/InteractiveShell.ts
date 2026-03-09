@@ -52,7 +52,7 @@ export class InteractiveShell extends EventEmitter {
             // Emit status
             this.emit('message', { 
                 type: 'system', 
-                data: `🐳 Démarrage du shell interactif (${imageName})...` 
+                data: `Starting interactive shell (${imageName})...` 
             } as ShellMessage);
 
             // Check if image exists
@@ -61,7 +61,7 @@ export class InteractiveShell extends EventEmitter {
             } catch {
                 this.emit('message', { 
                     type: 'system', 
-                    data: `📥 Téléchargement de l'image ${imageName}...` 
+                    data: `Downloading image ${imageName}...` 
                 } as ShellMessage);
 
                 // Pull image
@@ -140,7 +140,7 @@ export class InteractiveShell extends EventEmitter {
             });
 
             this.outputStream.on('end', () => {
-                this.emit('message', { type: 'system', data: '🔌 Shell fermé' } as ShellMessage);
+                this.emit('message', { type: 'system', data: 'Shell closed' } as ShellMessage);
                 this.emit('close');
                 this.isRunning = false;
             });
@@ -159,7 +159,7 @@ export class InteractiveShell extends EventEmitter {
 
             this.emit('message', { 
                 type: 'system', 
-                data: '✓ Shell prêt. Tapez vos commandes.' 
+                data: 'Shell ready. Type your commands.' 
             } as ShellMessage);
 
             return true;

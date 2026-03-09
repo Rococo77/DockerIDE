@@ -35,9 +35,9 @@ const LANGUAGE_TEMPLATES: LanguageTemplate[] = [
     {
         id: 'php',
         name: 'PHP',
-        icon: '🐘',
+        icon: 'HP',
         image: 'composer:latest',
-        description: 'PHP 8.2 avec Composer',
+        description: 'PHP 8.2 with Composer',
         templates: [
             {
                 id: 'php-basic',
@@ -51,7 +51,7 @@ const LANGUAGE_TEMPLATES: LanguageTemplate[] = [
  * Mon premier projet PHP dans Docker IDE
  */
 
-echo "🐳 Hello from Docker IDE!\\n";
+echo "Hello from Docker IDE!\\n";
 echo "Modifiez ce fichier et appuyez sur F5 pour exécuter\\n";
 
 // Exemple avec array
@@ -64,7 +64,7 @@ echo "Nombres doublés: " . implode(", ", $doubled) . "\\n";
             },
             {
                 id: 'php-laravel',
-                name: '🎭 Laravel',
+                name: 'Laravel',
                 description: 'Application Laravel complète',
                 framework: 'Laravel',
                 requiresInstall: true,
@@ -112,7 +112,7 @@ php artisan serve --host=0.0.0.0 --port=8000
             },
             {
                 id: 'php-symfony',
-                name: '🎼 Symfony',
+                name: 'Symfony',
                 description: 'Application Symfony 7',
                 framework: 'Symfony',
                 requiresInstall: true,
@@ -164,9 +164,9 @@ php -S 0.0.0.0:8000 -t public
     {
         id: 'python',
         name: 'Python',
-        icon: '🐍',
+        icon: 'PY',
         image: 'python:3.11-slim',
-        description: 'Python 3.11 avec pip',
+        description: 'Python 3.11 with pip',
         templates: [
             {
                 id: 'python-basic',
@@ -179,7 +179,7 @@ php -S 0.0.0.0:8000 -t public
 """Mon premier projet Python dans Docker IDE"""
 
 def main():
-    print("🐳 Hello from Docker IDE!")
+    print("Hello from Docker IDE!")
     print("Modifiez ce fichier et appuyez sur F5 pour exécuter")
     
     # Exemple avec list comprehension
@@ -204,7 +204,7 @@ Appuyez sur **F5** ou cliquez sur le bouton **Exécuter** pour lancer le program
             },
             {
                 id: 'python-flask',
-                name: '🌶️ Flask',
+                name: 'Flask',
                 description: 'Application Web Flask légère',
                 framework: 'Flask',
                 requiresInstall: true,
@@ -229,7 +229,7 @@ HTML = """
     </style>
 </head>
 <body>
-    <h1>🐳 Flask App</h1>
+    <h1>Flask App</h1>
     <div class="card">
         <p>Votre serveur Flask fonctionne dans Docker!</p>
         <p>Visitez <a href="/api/status" style="color: #4ec9b0;">/api/status</a> pour voir l'API</p>
@@ -247,7 +247,7 @@ def status():
     return jsonify({
         "status": "running",
         "framework": "Flask",
-        "message": "🐳 Hello from Docker IDE!"
+        "message": "Hello from Docker IDE!"
     })
 
 if __name__ == '__main__':
@@ -273,7 +273,7 @@ python-dotenv==1.0.0
             },
             {
                 id: 'python-django',
-                name: '🦄 Django',
+                name: 'Django',
                 description: 'Application Django complète',
                 framework: 'Django',
                 requiresInstall: true,
@@ -322,7 +322,7 @@ Créez un superuser: \`python manage.py createsuperuser\`
             },
             {
                 id: 'python-fastapi',
-                name: '⚡ FastAPI',
+                name: 'FastAPI',
                 description: 'API moderne et rapide',
                 framework: 'FastAPI',
                 requiresInstall: true,
@@ -337,7 +337,7 @@ from typing import Optional
 
 app = FastAPI(
     title="Docker IDE API",
-    description="🐳 API créée avec FastAPI dans Docker IDE",
+    description="API built with FastAPI in Docker IDE",
     version="1.0.0"
 )
 
@@ -351,7 +351,7 @@ items = []
 @app.get("/")
 def root():
     return {
-        "message": "🐳 Hello from Docker IDE!",
+        "message": "Hello from Docker IDE!",
         "docs": "/docs",
         "redoc": "/redoc"
     }
@@ -396,7 +396,7 @@ pydantic>=2.5.0
     {
         id: 'javascript',
         name: 'JavaScript',
-        icon: '📜',
+        icon: 'JS',
         image: 'node:20-alpine',
         description: 'Node.js 20 LTS',
         templates: [
@@ -412,7 +412,7 @@ pydantic>=2.5.0
  */
 
 function main() {
-    console.log("🐳 Hello from Docker IDE!");
+    console.log("Hello from Docker IDE!");
     console.log("Modifiez ce fichier et appuyez sur F5 pour exécuter");
     
     const numbers = [1, 2, 3, 4, 5];
@@ -439,7 +439,7 @@ main();
             },
             {
                 id: 'js-express',
-                name: '🚂 Express',
+                name: 'Express',
                 description: 'API REST avec Express.js',
                 framework: 'Express',
                 requiresInstall: true,
@@ -460,7 +460,7 @@ app.use(express.json());
 // Routes
 app.get('/', (req, res) => {
     res.json({
-        message: "🐳 Hello from Docker IDE!",
+        message: "Hello from Docker IDE!",
         framework: "Express.js",
         endpoints: ["/api/status", "/api/items"]
     });
@@ -487,7 +487,7 @@ app.post('/api/items', (req, res) => {
 });
 
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(\`🚀 Serveur Express démarré sur http://localhost:\${PORT}\`);
+    console.log(\`Server running on http://localhost:\${PORT}\`);
 });
 `,
                     },
@@ -520,7 +520,7 @@ app.listen(PORT, '0.0.0.0', () => {
             },
             {
                 id: 'js-react',
-                name: '⚛️ React (Vite)',
+                name: 'React (Vite)',
                 description: 'Application React avec Vite',
                 framework: 'React',
                 requiresInstall: true,
@@ -560,7 +560,7 @@ Le serveur de développement sera accessible sur http://localhost:5173
             },
             {
                 id: 'js-vue',
-                name: '💚 Vue.js (Vite)',
+                name: 'Vue.js (Vite)',
                 description: 'Application Vue 3 avec Vite',
                 framework: 'Vue',
                 requiresInstall: true,
@@ -637,7 +637,7 @@ Le serveur sera accessible sur http://localhost:3000
             },
             {
                 id: 'js-nestjs',
-                name: '🐱 NestJS',
+                name: 'NestJS',
                 description: 'Framework backend progressif',
                 framework: 'NestJS',
                 requiresInstall: true,
@@ -682,9 +682,9 @@ API accessible sur http://localhost:3000
     {
         id: 'typescript',
         name: 'TypeScript',
-        icon: '📘',
+        icon: 'TS',
         image: 'node:20-alpine',
-        description: 'TypeScript avec ts-node',
+        description: 'TypeScript with ts-node',
         templates: [
             {
                 id: 'ts-basic',
@@ -710,7 +710,7 @@ function greet(person: Person): string {
 
 const user: Person = { name: "Docker", age: 10 };
 
-console.log("🐳 Hello from Docker IDE!");
+console.log("Hello from Docker IDE!");
 console.log(greet(user));
 
 // Exemple avec types
@@ -761,7 +761,7 @@ console.log("Nombres doublés:", doubled);
     {
         id: 'java',
         name: 'Java',
-        icon: '☕',
+        icon: 'JV',
         image: 'eclipse-temurin:17-jdk',
         description: 'Java 17 LTS (Eclipse Temurin)',
         templates: [
@@ -777,7 +777,7 @@ console.log("Nombres doublés:", doubled);
  */
 public class Main {
     public static void main(String[] args) {
-        System.out.println("🐳 Hello from Docker IDE!");
+        System.out.println("Hello from Docker IDE!");
         System.out.println("Modifiez ce fichier et appuyez sur F5 pour exécuter");
         
         // Exemple avec streams
@@ -795,7 +795,7 @@ public class Main {
             },
             {
                 id: 'java-spring',
-                name: '🍃 Spring Boot',
+                name: 'Spring Boot',
                 description: 'Application Spring Boot',
                 framework: 'Spring Boot',
                 requiresInstall: true,
@@ -833,7 +833,7 @@ API accessible sur http://localhost:8080
             },
             {
                 id: 'java-maven',
-                name: '📦 Maven Project',
+                name: 'Maven Project',
                 description: 'Projet Maven standard',
                 framework: 'Maven',
                 files: [
@@ -873,7 +873,7 @@ API accessible sur http://localhost:8080
 
 public class App {
     public static void main(String[] args) {
-        System.out.println("🐳 Hello from Docker IDE!");
+        System.out.println("Hello from Docker IDE!");
     }
 }
 `,
@@ -888,7 +888,7 @@ public class App {
     {
         id: 'go',
         name: 'Go',
-        icon: '🐹',
+        icon: 'GO',
         image: 'golang:1.21-alpine',
         description: 'Go 1.21',
         templates: [
@@ -904,7 +904,7 @@ public class App {
 import "fmt"
 
 func main() {
-    fmt.Println("🐳 Hello from Docker IDE!")
+    fmt.Println("Hello from Docker IDE!")
     fmt.Println("Modifiez ce fichier et appuyez sur F5 pour exécuter")
     
     numbers := []int{1, 2, 3, 4, 5}
@@ -927,7 +927,7 @@ go 1.21
             },
             {
                 id: 'go-gin',
-                name: '🍸 Gin API',
+                name: 'Gin API',
                 description: 'API REST avec Gin',
                 framework: 'Gin',
                 requiresInstall: true,
@@ -955,7 +955,7 @@ func main() {
     
     r.GET("/", func(c *gin.Context) {
         c.JSON(http.StatusOK, gin.H{
-            "message": "🐳 Hello from Docker IDE!",
+            "message": "Hello from Docker IDE!",
             "framework": "Gin",
         })
     })
@@ -1000,7 +1000,7 @@ require github.com/gin-gonic/gin v1.9.1
             },
             {
                 id: 'go-fiber',
-                name: '⚡ Fiber API',
+                name: 'Fiber API',
                 description: 'API ultra-rapide avec Fiber',
                 framework: 'Fiber',
                 requiresInstall: true,
@@ -1020,7 +1020,7 @@ func main() {
 
     app.Get("/", func(c *fiber.Ctx) error {
         return c.JSON(fiber.Map{
-            "message":   "🐳 Hello from Docker IDE!",
+            "message":   "Hello from Docker IDE!",
             "framework": "Fiber",
         })
     })
@@ -1063,7 +1063,7 @@ require github.com/gofiber/fiber/v2 v2.51.0
     {
         id: 'rust',
         name: 'Rust',
-        icon: '🦀',
+        icon: 'RS',
         image: 'rust:1.73-slim',
         description: 'Rust stable',
         templates: [
@@ -1077,7 +1077,7 @@ require github.com/gofiber/fiber/v2 v2.51.0
                         content: `//! Mon premier projet Rust dans Docker IDE
 
 fn main() {
-    println!("🐳 Hello from Docker IDE!");
+    println!("Hello from Docker IDE!");
     println!("Modifiez ce fichier et appuyez sur F5 pour exécuter");
     
     let numbers: Vec<i32> = vec![1, 2, 3, 4, 5];
@@ -1090,7 +1090,7 @@ fn main() {
             },
             {
                 id: 'rust-actix',
-                name: '🎭 Actix Web',
+                name: 'Actix Web',
                 description: 'API REST avec Actix',
                 framework: 'Actix',
                 requiresInstall: true,
@@ -1125,7 +1125,7 @@ struct Status {
 #[get("/")]
 async fn index() -> impl Responder {
     HttpResponse::Ok().json(Status {
-        message: "🐳 Hello from Docker IDE!".to_string(),
+        message: "Hello from Docker IDE!".to_string(),
         framework: "Actix Web".to_string(),
     })
 }
@@ -1139,7 +1139,7 @@ async fn status() -> impl Responder {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    println!("🚀 Serveur Actix démarré sur http://localhost:8080");
+    println!("Server running on http://localhost:8080");
     
     HttpServer::new(|| {
         App::new()
@@ -1171,7 +1171,7 @@ async fn main() -> std::io::Result<()> {
     {
         id: 'ruby',
         name: 'Ruby',
-        icon: '💎',
+        icon: 'RB',
         image: 'ruby:3.2-slim',
         description: 'Ruby 3.2',
         templates: [
@@ -1185,7 +1185,7 @@ async fn main() -> std::io::Result<()> {
                         content: `#!/usr/bin/env ruby
 # Mon premier projet Ruby dans Docker IDE
 
-puts "🐳 Hello from Docker IDE!"
+puts "Hello from Docker IDE!"
 puts "Modifiez ce fichier et appuyez sur F5 pour exécuter"
 
 numbers = [1, 2, 3, 4, 5]
@@ -1197,7 +1197,7 @@ puts "Nombres doublés: #{doubled}"
             },
             {
                 id: 'ruby-sinatra',
-                name: '🎤 Sinatra',
+                name: 'Sinatra',
                 description: 'API légère avec Sinatra',
                 framework: 'Sinatra',
                 requiresInstall: true,
@@ -1215,7 +1215,7 @@ set :port, 4567
 get '/' do
   content_type :json
   {
-    message: "🐳 Hello from Docker IDE!",
+    message: "Hello from Docker IDE!",
     framework: "Sinatra"
   }.to_json
 end
@@ -1248,7 +1248,7 @@ gem 'puma'
             },
             {
                 id: 'ruby-rails',
-                name: '🛤️ Ruby on Rails',
+                name: 'Ruby on Rails',
                 description: 'Application Rails complète',
                 framework: 'Rails',
                 requiresInstall: true,
@@ -1375,7 +1375,7 @@ const ProjectCreatorModal: React.FC<ProjectCreatorProps> = ({
                 // Switch to installation step
                 setStep('installing');
                 setInstallOutput([]);
-                setInstallProgress('🚀 Démarrage de l\'installation...');
+                setInstallProgress('Starting installation...');
                 setInstallComplete(false);
                 setInstallError(null);
 
@@ -1391,7 +1391,7 @@ const ProjectCreatorModal: React.FC<ProjectCreatorProps> = ({
 
                     if (result.success) {
                         // Now create template files AFTER successful installation
-                        setInstallProgress('📝 Ajout des fichiers de configuration...');
+                        setInstallProgress('Adding configuration files...');
                         for (const file of selectedTemplate.files) {
                             const filePath = `${fullProjectPath}/${file.path}`;
                             await window.electronAPI.fs.writeFile(filePath, file.content);
@@ -1411,7 +1411,7 @@ const ProjectCreatorModal: React.FC<ProjectCreatorProps> = ({
                         );
 
                         setInstallComplete(true);
-                        setInstallProgress('✅ Installation terminée avec succès!');
+                        setInstallProgress('Installation completed successfully');
                         // Wait a bit then open project
                         setTimeout(() => {
                             onProjectCreated(fullProjectPath);
@@ -1419,11 +1419,11 @@ const ProjectCreatorModal: React.FC<ProjectCreatorProps> = ({
                         }, 1500);
                     } else {
                         setInstallError(result.error || 'Erreur lors de l\'installation');
-                        setInstallProgress('❌ Échec de l\'installation');
+                        setInstallProgress('Installation failed');
                     }
                 } catch (err: any) {
                     setInstallError(err.message);
-                    setInstallProgress('❌ Erreur inattendue');
+                    setInstallProgress('Unexpected error');
                 }
             } else {
                 // No installation needed, create template files first
@@ -1484,9 +1484,9 @@ const ProjectCreatorModal: React.FC<ProjectCreatorProps> = ({
             <div className="modal-content project-creator" onClick={(e) => e.stopPropagation()}>
                 <div className="modal-header">
                     <h2>
-                        {step === 'language' && '🚀 Nouveau Projet'}
+                        {step === 'language' && 'New Project'}
                         {step === 'template' && `${selectedLanguage?.icon} ${selectedLanguage?.name}`}
-                        {step === 'location' && '📁 Emplacement'}
+                        {step === 'location' && 'Location'}
                     </h2>
                     <button className="modal-close" onClick={handleClose}>×</button>
                 </div>
@@ -1527,7 +1527,7 @@ const ProjectCreatorModal: React.FC<ProjectCreatorProps> = ({
                                     <p>{template.description}</p>
                                     {template.requiresInstall && (
                                         <div className="template-install-info">
-                                            <span className="install-badge">📦 Installation requise</span>
+                                            <span className="install-badge">Setup required</span>
                                         </div>
                                     )}
                                     <div className="template-files">
@@ -1578,7 +1578,7 @@ const ProjectCreatorModal: React.FC<ProjectCreatorProps> = ({
                             )}
                             {selectedTemplate?.requiresInstall && (
                                 <div className="install-notice-box">
-                                    <span className="install-icon">📦</span>
+                                    <span className="install-icon">i</span>
                                     <div className="install-info">
                                         <strong>Installation automatique</strong>
                                         <p>Les dépendances du framework {selectedTemplate.framework} seront installées automatiquement via Docker.</p>
@@ -1594,7 +1594,7 @@ const ProjectCreatorModal: React.FC<ProjectCreatorProps> = ({
                     {step === 'installing' && (
                         <div className="installation-progress">
                             <div className="install-header">
-                                <span className="install-spinner">{installComplete ? '✅' : '⚙️'}</span>
+                                <span className={`install-spinner ${installComplete ? 'done' : ''}`}>{installComplete ? '\u2713' : ''}</span>
                                 <h3>{installProgress}</h3>
                             </div>
                             
@@ -1611,7 +1611,7 @@ const ProjectCreatorModal: React.FC<ProjectCreatorProps> = ({
 
                             {installError && (
                                 <div className="install-error">
-                                    <strong>❌ Erreur:</strong> {installError}
+                                    <strong>Error:</strong> {installError}
                                     <button 
                                         className="btn btn-secondary btn-small"
                                         onClick={() => {
@@ -1626,7 +1626,7 @@ const ProjectCreatorModal: React.FC<ProjectCreatorProps> = ({
 
                             {installComplete && (
                                 <div className="install-success">
-                                    <p>🎉 Votre projet {selectedTemplate?.framework} est prêt!</p>
+                                    <p>Your {selectedTemplate?.framework} project is ready.</p>
                                 </div>
                             )}
                         </div>
@@ -1651,7 +1651,7 @@ const ProjectCreatorModal: React.FC<ProjectCreatorProps> = ({
                                 onClick={handleCreateProject}
                                 disabled={isCreating || !projectPath || !projectName}
                             >
-                                {isCreating ? 'Création...' : selectedTemplate?.requiresInstall ? '🚀 Créer & Installer' : '✨ Créer le projet'}
+                                {isCreating ? 'Creating...' : selectedTemplate?.requiresInstall ? 'Create & Install' : 'Create Project'}
                             </button>
                         )}
                         {step === 'installing' && installComplete && (

@@ -190,13 +190,13 @@ export class CodeRunner {
             // Check if container already exists for this project
             const existingContainer = this.projectContainerManager.getContainerInfo(workspacePath);
             if (existingContainer) {
-                onProgress?.(`♻️ Réutilisation du conteneur ${existingContainer.name}...`);
+                onProgress?.(`Reusing container ${existingContainer.name}...`);
             } else {
-                onProgress?.('🐳 Création du conteneur persistant...');
+                onProgress?.('Creating persistent container...');
             }
 
             // Execute in persistent container
-            onProgress?.('▶️ Exécution du code...');
+            onProgress?.('Running code...');
             const result = await this.projectContainerManager.exec(
                 workspacePath,
                 ['sh', '-c', command.join(' ')],
@@ -254,7 +254,7 @@ export class CodeRunner {
 
         try {
             // Ensure image is available
-            onProgress?.(`📦 Téléchargement de l'image ${image}...`);
+            onProgress?.(`Downloading image ${image}...`);
             const imageReady = await this.ensureImage(image, onProgress);
             if (!imageReady) {
                 return {
@@ -265,7 +265,7 @@ export class CodeRunner {
             }
 
             const containerName = `docker-ide-setup-${Date.now()}`;
-            onProgress?.('🐳 Création du conteneur d\'installation...');
+            onProgress?.('Creating setup container...');
 
             // Create container with network access for package downloads
             const containerConfig = {
@@ -286,7 +286,7 @@ export class CodeRunner {
                 OpenStdin: false,
             };
 
-            onProgress?.('⚙️ Installation du framework en cours...');
+            onProgress?.('Installing framework...');
             const container = await this.containerManager.createContainer(containerConfig);
 
             // Collect output
@@ -327,9 +327,9 @@ export class CodeRunner {
             const executionTime = Date.now() - startTime;
 
             if (result.StatusCode === 0) {
-                onProgress?.('✅ Framework installé avec succès!');
+                onProgress?.('Framework installed successfully');
             } else {
-                onProgress?.('❌ Erreur lors de l\'installation');
+                onProgress?.('Framework installation failed');
             }
 
             return {

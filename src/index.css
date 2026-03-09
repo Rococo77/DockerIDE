@@ -432,6 +432,20 @@ body {
     line-height: 1;
 }
 
+.extension-icon-text {
+    font-size: 14px;
+    font-weight: 700;
+    font-family: 'Consolas', 'Monaco', monospace;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-tertiary);
+    border-radius: 6px;
+    color: var(--accent-blue);
+}
+
 .extension-info {
     flex: 1;
     min-width: 0;
@@ -701,6 +715,18 @@ body {
     margin-bottom: 12px;
 }
 
+.welcome-icon-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    border-radius: 8px;
+    background: var(--bg-tertiary);
+    margin-bottom: 12px;
+    color: var(--accent-blue);
+}
+
 .welcome-card h3 {
     font-size: 14px;
     margin-bottom: 4px;
@@ -777,6 +803,22 @@ kbd {
 .terminal-tab.active {
     color: var(--text-primary);
     border-bottom: 1px solid var(--accent-blue);
+}
+
+.shell-active-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--success);
+    margin-left: 4px;
+    vertical-align: middle;
+}
+
+.shell-option-image {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: 'Consolas', 'Monaco', monospace;
 }
 
 .terminal-actions {
@@ -893,20 +935,16 @@ kbd {
     gap: 6px;
 }
 
-.status-indicator.connected::before {
-    content: '';
+.status-dot-inline {
     width: 8px;
     height: 8px;
-    background: #4caf50;
     border-radius: 50%;
+    background: #f44336;
+    flex-shrink: 0;
 }
 
-.status-indicator.disconnected::before {
-    content: '';
-    width: 8px;
-    height: 8px;
-    background: #f44336;
-    border-radius: 50%;
+.status-dot-inline.active {
+    background: #4caf50;
 }
 
 /* Project Container Status */
@@ -1182,6 +1220,28 @@ kbd {
 
 .file-icon {
     flex-shrink: 0;
+}
+
+.file-icon-svg {
+    display: inline-flex;
+    align-items: center;
+}
+
+.file-icon-label {
+    font-size: 10px;
+    font-weight: 700;
+    font-family: 'Consolas', 'Monaco', monospace;
+    width: 20px;
+    text-align: center;
+    display: inline-block;
+}
+
+.file-icon-text {
+    font-size: 10px;
+    font-weight: 700;
+    font-family: 'Consolas', 'Monaco', monospace;
+    color: var(--accent-blue);
+    margin-right: 4px;
 }
 
 .file-tree-children {
