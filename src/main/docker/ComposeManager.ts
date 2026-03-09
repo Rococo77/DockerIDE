@@ -1,4 +1,4 @@
-import { exec, spawn, ChildProcess } from 'child_process';
+import { spawn, execFileSync, ChildProcess } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -43,7 +43,7 @@ export class ComposeManager {
         // Modern Docker includes compose as a plugin: `docker compose`
         // Fallback to standalone `docker-compose` if needed
         try {
-            const result = require('child_process').execSync('docker compose version', {
+            const result = execFileSync('docker', ['compose', 'version'], {
                 encoding: 'utf-8',
                 timeout: 5000,
             });
@@ -56,7 +56,7 @@ export class ComposeManager {
         }
 
         try {
-            require('child_process').execSync('docker-compose version', {
+            execFileSync('docker-compose', ['version'], {
                 encoding: 'utf-8',
                 timeout: 5000,
             });
@@ -188,8 +188,12 @@ export class ComposeManager {
 
             const proc = spawn(binary, fullArgs, {
                 cwd: projectPath,
-                env: { ...process.env },
-                shell: true,
+                env: {
+                    PATH: process.env.PATH,
+                    HOME: process.env.HOME,
+                    USERPROFILE: process.env.USERPROFILE,
+                    DOCKER_HOST: process.env.DOCKER_HOST,
+                },
             });
 
             let stdout = '';
@@ -269,14 +273,16 @@ export class ComposeManager {
     depends_on:
       - db
     environment:
-      DATABASE_URL: postgres://user:password@db:5432/app
+      DATABASE_URL: \${DATABASE_URL:-postgres://app_user:changeme@db:5432/app}
+    env_file:
+      - .env
 
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: app
+      POSTGRES_USER: \${POSTGRES_USER:-app_user}
+      POSTGRES_PASSWORD: \${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: \${POSTGRES_DB:-app}
     volumes:
       - db_data:/var/lib/postgresql/data
     ports:
@@ -308,15 +314,17 @@ volumes:
     depends_on:
       - db
     environment:
-      DATABASE_URL: postgres://user:password@db:5432/app
+      DATABASE_URL: \${DATABASE_URL:-postgres://app_user:changeme@db:5432/app}
+    env_file:
+      - .env
     command: sh -c "npm install && npm start"
 
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: app
+      POSTGRES_USER: \${POSTGRES_USER:-app_user}
+      POSTGRES_PASSWORD: \${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: \${POSTGRES_DB:-app}
     volumes:
       - db_data:/var/lib/postgresql/data
 

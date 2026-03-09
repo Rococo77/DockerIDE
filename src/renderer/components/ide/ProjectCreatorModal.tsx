@@ -454,7 +454,7 @@ const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(cors());
+app.use(cors({ origin: process.env.CORS_ORIGIN || 'http://localhost:5173' }));
 app.use(express.json());
 
 // Routes
@@ -1314,15 +1314,15 @@ rails server -b 0.0.0.0
     depends_on:
       - db
     environment:
-      DATABASE_URL: postgres://user:password@db:5432/app
+      DATABASE_URL: \${DATABASE_URL:-postgres://app_user:changeme@db:5432/app}
     command: sh -c "npm install && node index.js"
 
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: app
+      POSTGRES_USER: \${POSTGRES_USER:-app_user}
+      POSTGRES_PASSWORD: \${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: \${POSTGRES_DB:-app}
     volumes:
       - db_data:/var/lib/postgresql/data
     ports:
@@ -1395,15 +1395,15 @@ server.listen(3000, '0.0.0.0', () => {
     depends_on:
       - db
     environment:
-      DATABASE_URL: postgres://user:password@db:5432/app
+      DATABASE_URL: \${DATABASE_URL:-postgres://app_user:changeme@db:5432/app}
     command: sh -c "npm install && node index.js"
 
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: app
+      POSTGRES_USER: \${POSTGRES_USER:-app_user}
+      POSTGRES_PASSWORD: \${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: \${POSTGRES_DB:-app}
     volumes:
       - db_data:/var/lib/postgresql/data
 
@@ -1418,7 +1418,7 @@ volumes:
 const server = http.createServer((req, res) => {
     res.writeHead(200, {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': 'http://localhost:5173',
     });
     res.end(JSON.stringify({ message: 'Backend API running' }));
 });

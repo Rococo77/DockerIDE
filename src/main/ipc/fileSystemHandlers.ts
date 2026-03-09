@@ -1,5 +1,21 @@
 import { ipcMain, dialog, BrowserWindow } from 'electron';
+import * as path from 'path';
 import { FileSystemManager } from '../fs/FileSystemManager';
+
+/**
+ * Validate that a string is a valid file path and does not contain
+ * null bytes or other dangerous patterns.
+ */
+function sanitizePath(inputPath: string): string {
+    if (typeof inputPath !== 'string' || inputPath.length === 0) {
+        throw new Error('Invalid path: must be a non-empty string');
+    }
+    // Reject null bytes (common attack vector)
+    if (inputPath.includes('\0')) {
+        throw new Error('Invalid path: contains null bytes');
+    }
+    return path.normalize(inputPath);
+}
 
 export function registerFileSystemHandlers(): void {
     const fsManager = FileSystemManager.getInstance();
@@ -40,7 +56,8 @@ export function registerFileSystemHandlers(): void {
     // Read directory
     ipcMain.handle('fs:read-directory', async (_, dirPath: string, depth?: number) => {
         try {
-            const files = await fsManager.readDirectory(dirPath, depth);
+            const safePath = sanitizePath(dirPath);
+            const files = await fsManager.readDirectory(safePath, depth);
             return { success: true, files };
         } catch (error: any) {
             return { success: false, error: error.message };
@@ -50,7 +67,8 @@ export function registerFileSystemHandlers(): void {
     // Read file
     ipcMain.handle('fs:read-file', async (_, filePath: string) => {
         try {
-            const fileContent = await fsManager.readFile(filePath);
+            const safePath = sanitizePath(filePath);
+            const fileContent = await fsManager.readFile(safePath);
             return { success: true, ...fileContent };
         } catch (error: any) {
             return { success: false, error: error.message };
@@ -60,7 +78,8 @@ export function registerFileSystemHandlers(): void {
     // Write file
     ipcMain.handle('fs:write-file', async (_, filePath: string, content: string) => {
         try {
-            await fsManager.writeFile(filePath, content);
+            const safePath = sanitizePath(filePath);
+            await fsManager.writeFile(safePath, content);
             return { success: true };
         } catch (error: any) {
             return { success: false, error: error.message };
@@ -70,7 +89,8 @@ export function registerFileSystemHandlers(): void {
     // Create file
     ipcMain.handle('fs:create-file', async (_, filePath: string, content?: string) => {
         try {
-            await fsManager.createFile(filePath, content);
+            const safePath = sanitizePath(filePath);
+            await fsManager.createFile(safePath, content);
             return { success: true };
         } catch (error: any) {
             return { success: false, error: error.message };
@@ -80,7 +100,8 @@ export function registerFileSystemHandlers(): void {
     // Create directory
     ipcMain.handle('fs:create-directory', async (_, dirPath: string) => {
         try {
-            await fsManager.createDirectory(dirPath);
+            const safePath = sanitizePath(dirPath);
+            await fsManager.createDirectory(safePath);
             return { success: true };
         } catch (error: any) {
             return { success: false, error: error.message };
@@ -90,7 +111,8 @@ export function registerFileSystemHandlers(): void {
     // Delete file or directory
     ipcMain.handle('fs:delete', async (_, itemPath: string) => {
         try {
-            await fsManager.delete(itemPath);
+            const safePath = sanitizePath(itemPath);
+            await fsManager.delete(safePath);
             return { success: true };
         } catch (error: any) {
             return { success: false, error: error.message };
@@ -100,7 +122,9 @@ export function registerFileSystemHandlers(): void {
     // Rename file or directory
     ipcMain.handle('fs:rename', async (_, oldPath: string, newPath: string) => {
         try {
-            await fsManager.rename(oldPath, newPath);
+            const safeOld = sanitizePath(oldPath);
+            const safeNew = sanitizePath(newPath);
+            await fsManager.rename(safeOld, safeNew);
             return { success: true };
         } catch (error: any) {
             return { success: false, error: error.message };
@@ -110,7 +134,8 @@ export function registerFileSystemHandlers(): void {
     // Check if path exists
     ipcMain.handle('fs:exists', async (_, itemPath: string) => {
         try {
-            const exists = await fsManager.exists(itemPath);
+            const safePath = sanitizePath(itemPath);
+            const exists = await fsManager.exists(safePath);
             return { success: true, exists };
         } catch (error: any) {
             return { success: false, error: error.message };

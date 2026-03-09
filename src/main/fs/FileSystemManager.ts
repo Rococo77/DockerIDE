@@ -21,6 +21,21 @@ export class FileSystemManager {
 
     private constructor() {}
 
+    /**
+     * Validate that a path is within the workspace to prevent path traversal attacks.
+     * Throws if the path escapes the workspace.
+     */
+    private validatePath(targetPath: string): void {
+        if (!this.currentWorkspace) {
+            throw new Error('No workspace set. Open a folder first.');
+        }
+        const resolved = path.resolve(targetPath);
+        const workspace = path.resolve(this.currentWorkspace);
+        if (!resolved.startsWith(workspace + path.sep) && resolved !== workspace) {
+            throw new Error('Access denied: path is outside the workspace.');
+        }
+    }
+
     static getInstance(): FileSystemManager {
         if (!FileSystemManager.instance) {
             FileSystemManager.instance = new FileSystemManager();
@@ -51,8 +66,9 @@ export class FileSystemManager {
      */
     async readDirectory(dirPath: string, depth: number = 3): Promise<FileNode[]> {
         const result: FileNode[] = [];
-        
+
         try {
+            this.validatePath(dirPath);
             const entries = await fs.promises.readdir(dirPath, { withFileTypes: true });
             
             // Sort: directories first, then files, alphabetically
@@ -100,6 +116,7 @@ export class FileSystemManager {
      */
     async readFile(filePath: string): Promise<FileContent> {
         try {
+            this.validatePath(filePath);
             const content = await fs.promises.readFile(filePath, 'utf-8');
             return {
                 path: filePath,
@@ -117,6 +134,7 @@ export class FileSystemManager {
      */
     async writeFile(filePath: string, content: string): Promise<void> {
         try {
+            this.validatePath(filePath);
             // Ensure directory exists
             const dir = path.dirname(filePath);
             await fs.promises.mkdir(dir, { recursive: true });
@@ -132,6 +150,7 @@ export class FileSystemManager {
      * Create a new file
      */
     async createFile(filePath: string, content: string = ''): Promise<void> {
+        this.validatePath(filePath);
         if (fs.existsSync(filePath)) {
             throw new Error(`File already exists: ${filePath}`);
         }
@@ -143,6 +162,7 @@ export class FileSystemManager {
      */
     async createDirectory(dirPath: string): Promise<void> {
         try {
+            this.validatePath(dirPath);
             await fs.promises.mkdir(dirPath, { recursive: true });
         } catch (error) {
             console.error(`Error creating directory ${dirPath}:`, error);
@@ -155,6 +175,7 @@ export class FileSystemManager {
      */
     async delete(itemPath: string): Promise<void> {
         try {
+            this.validatePath(itemPath);
             const stat = await fs.promises.stat(itemPath);
             if (stat.isDirectory()) {
                 await fs.promises.rm(itemPath, { recursive: true });
@@ -172,6 +193,8 @@ export class FileSystemManager {
      */
     async rename(oldPath: string, newPath: string): Promise<void> {
         try {
+            this.validatePath(oldPath);
+            this.validatePath(newPath);
             await fs.promises.rename(oldPath, newPath);
         } catch (error) {
             console.error(`Error renaming ${oldPath} to ${newPath}:`, error);
