@@ -229,5 +229,69 @@ export function registerRunnerHandlers(): void {
         }
     });
 
+    // ===================================
+    // Project Container Management Handlers
+    // ===================================
+
+    // Get container info for a project
+    ipcMain.handle('runner:get-project-container', async (_, projectPath: string) => {
+        try {
+            const info = runner.getProjectContainerInfo(projectPath);
+            return { success: true, container: info || null };
+        } catch (error: any) {
+            return { success: false, error: error.message, container: null };
+        }
+    });
+
+    // Stop project container
+    ipcMain.handle('runner:stop-project-container', async (_, projectPath: string) => {
+        try {
+            await runner.stopProjectContainer(projectPath);
+            return { success: true };
+        } catch (error: any) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    // Remove project container
+    ipcMain.handle('runner:remove-project-container', async (_, projectPath: string) => {
+        try {
+            await runner.removeProjectContainer(projectPath);
+            return { success: true };
+        } catch (error: any) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    // Check if project container is running
+    ipcMain.handle('runner:is-container-running', async (_, projectPath: string) => {
+        try {
+            const running = runner.isProjectContainerRunning(projectPath);
+            return { success: true, running };
+        } catch (error: any) {
+            return { success: false, error: error.message, running: false };
+        }
+    });
+
+    // List all project containers
+    ipcMain.handle('runner:list-project-containers', async () => {
+        try {
+            const containers = runner.listProjectContainers();
+            return { success: true, containers };
+        } catch (error: any) {
+            return { success: false, error: error.message, containers: [] };
+        }
+    });
+
+    // Stop all project containers
+    ipcMain.handle('runner:stop-all-containers', async () => {
+        try {
+            await runner.stopAllProjectContainers();
+            return { success: true };
+        } catch (error: any) {
+            return { success: false, error: error.message };
+        }
+    });
+
     console.log('[Runner] Code runner IPC handlers registered');
 }

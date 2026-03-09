@@ -96,6 +96,19 @@ const api = {
             ipcRenderer.on('runner:setup-output', handler);
             return () => ipcRenderer.removeListener('runner:setup-output', handler);
         },
+        // Project container management
+        getProjectContainer: (projectPath: string) => 
+            ipcRenderer.invoke('runner:get-project-container', projectPath),
+        stopProjectContainer: (projectPath: string) => 
+            ipcRenderer.invoke('runner:stop-project-container', projectPath),
+        removeProjectContainer: (projectPath: string) => 
+            ipcRenderer.invoke('runner:remove-project-container', projectPath),
+        isContainerRunning: (projectPath: string) => 
+            ipcRenderer.invoke('runner:is-container-running', projectPath),
+        listProjectContainers: () => 
+            ipcRenderer.invoke('runner:list-project-containers'),
+        stopAllContainers: () => 
+            ipcRenderer.invoke('runner:stop-all-containers'),
     },
     shell: {
         // Start an interactive shell

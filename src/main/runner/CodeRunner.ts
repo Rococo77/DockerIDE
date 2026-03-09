@@ -1,6 +1,7 @@
 import { ContainerManager } from '../docker/ContainerManager';
 import { ImageManager } from '../docker/ImageManager';
 import { FileSystemManager } from '../fs/FileSystemManager';
+import { ProjectContainerManager } from './ProjectContainer';
 import * as path from 'path';
 
 interface ExecutionResult {
@@ -92,11 +93,13 @@ export class CodeRunner {
     private containerManager: ContainerManager;
     private imageManager: ImageManager;
     private fsManager: FileSystemManager;
+    private projectContainerManager: ProjectContainerManager;
 
     private constructor() {
         this.containerManager = ContainerManager.getInstance();
         this.imageManager = ImageManager.getInstance();
         this.fsManager = FileSystemManager.getInstance();
+        this.projectContainerManager = ProjectContainerManager.getInstance();
     }
 
     static getInstance(): CodeRunner {
@@ -148,7 +151,8 @@ export class CodeRunner {
     }
 
     /**
-     * Run code in a Docker container
+     * Run code in a persistent Docker container for the project
+     * Uses exec to run commands in an existing container instead of creating new ones
      */
     async runCode(config: RunConfig, onProgress?: (status: string) => void): Promise<ExecutionResult> {
         const { filePath, workspacePath, language } = config;
@@ -180,100 +184,42 @@ export class CodeRunner {
             const relativePath = path.relative(workspacePath, filePath).replace(/\\/g, '/');
             const containerFilePath = `/workspace/${relativePath}`;
 
-            // Create container configuration
-            const containerName = `docker-ide-run-${Date.now()}`;
-            onProgress?.('Création du conteneur...');
-
-            const containerConfig = {
-                Image: langConfig.image,
-                name: containerName,
-                Cmd: langConfig.command(containerFilePath),
-                WorkingDir: '/workspace',
-                HostConfig: {
-                    Binds: [`${workspacePath}:/workspace:ro`],
-                    AutoRemove: true,
-                    NetworkMode: 'none', // No network for security
-                    Memory: 256 * 1024 * 1024, // 256MB limit
-                    MemorySwap: 256 * 1024 * 1024,
-                    CpuPeriod: 100000,
-                    CpuQuota: 50000, // 50% CPU
-                },
-                Tty: false,
-                AttachStdout: true,
-                AttachStderr: true,
-            };
-
-            // Create and run container
-            onProgress?.('Exécution du code...');
-            const container = await this.containerManager.createContainer(containerConfig);
+            // Get command for the language
+            const command = langConfig.command(containerFilePath);
             
-            // Collect output
-            let stdout = '';
-            let stderr = '';
-            
-            const stream = await container.attach({
-                stream: true,
-                stdout: true,
-                stderr: true,
-            });
+            // Check if container already exists for this project
+            const existingContainer = this.projectContainerManager.getContainerInfo(workspacePath);
+            if (existingContainer) {
+                onProgress?.(`♻️ Réutilisation du conteneur ${existingContainer.name}...`);
+            } else {
+                onProgress?.('🐳 Création du conteneur persistant...');
+            }
 
-            // Parse Docker multiplexed stream
-            stream.on('data', (chunk: Buffer) => {
-                // Docker stream format: [header(8 bytes)][payload]
-                // header[0] = stream type (1=stdout, 2=stderr)
-                // header[4-7] = payload size
-                let offset = 0;
-                while (offset < chunk.length) {
-                    if (offset + 8 > chunk.length) break;
-                    
-                    const streamType = chunk[offset];
-                    const size = chunk.readUInt32BE(offset + 4);
-                    offset += 8;
-                    
-                    if (offset + size > chunk.length) break;
-                    
-                    const payload = chunk.slice(offset, offset + size).toString('utf-8');
-                    if (streamType === 1) {
-                        stdout += payload;
-                    } else if (streamType === 2) {
-                        stderr += payload;
-                    }
-                    offset += size;
+            // Execute in persistent container
+            onProgress?.('▶️ Exécution du code...');
+            const result = await this.projectContainerManager.exec(
+                workspacePath,
+                ['sh', '-c', command.join(' ')],
+                {
+                    image: langConfig.image,
+                    language,
+                    onOutput: (data, type) => {
+                        // Could stream output here if needed
+                    },
                 }
-            });
-
-            await container.start();
-
-            // Wait for container to finish (with timeout)
-            const result = await Promise.race([
-                container.wait(),
-                new Promise<{ StatusCode: number }>((_, reject) =>
-                    setTimeout(() => reject(new Error('Timeout')), 30000)
-                ),
-            ]);
-
-            const executionTime = Date.now() - startTime;
+            );
 
             return {
-                success: result.StatusCode === 0,
-                output: stdout,
-                error: stderr || undefined,
-                exitCode: result.StatusCode,
-                executionTime,
+                success: result.success,
+                output: result.output,
+                error: result.error,
+                exitCode: result.exitCode,
+                executionTime: result.executionTime,
             };
 
         } catch (error: any) {
             const executionTime = Date.now() - startTime;
             
-            if (error.message === 'Timeout') {
-                return {
-                    success: false,
-                    output: '',
-                    error: 'Exécution interrompue: temps limite dépassé (30s)',
-                    executionTime,
-                };
-            }
-
             return {
                 success: false,
                 output: '',
@@ -412,6 +358,48 @@ export class CodeRunner {
                 executionTime,
             };
         }
+    }
+
+    /**
+     * Get container info for a project
+     */
+    getProjectContainerInfo(projectPath: string) {
+        return this.projectContainerManager.getContainerInfo(projectPath);
+    }
+
+    /**
+     * Stop project container
+     */
+    async stopProjectContainer(projectPath: string): Promise<void> {
+        await this.projectContainerManager.stopContainer(projectPath);
+    }
+
+    /**
+     * Remove project container
+     */
+    async removeProjectContainer(projectPath: string): Promise<void> {
+        await this.projectContainerManager.removeContainer(projectPath);
+    }
+
+    /**
+     * Check if project has a running container
+     */
+    isProjectContainerRunning(projectPath: string): boolean {
+        return this.projectContainerManager.isContainerRunning(projectPath);
+    }
+
+    /**
+     * List all managed project containers
+     */
+    listProjectContainers() {
+        return this.projectContainerManager.listContainers();
+    }
+
+    /**
+     * Stop all project containers
+     */
+    async stopAllProjectContainers(): Promise<void> {
+        await this.projectContainerManager.stopAll();
     }
 }
 

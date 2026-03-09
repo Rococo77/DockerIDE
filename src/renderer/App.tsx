@@ -303,7 +303,7 @@ const App: React.FC = () => {
 
             {/* Barre de statut */}
             <div className="statusbar">
-                <DockerStatusBar />
+                <DockerStatusBar workspacePath={workspacePath} />
                 <div className="statusbar-right">
                     <button
                         className="statusbar-btn"
