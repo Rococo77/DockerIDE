@@ -27,6 +27,15 @@ const SHELL_OPTIONS = [
     { id: 'ruby', name: 'Ruby IRB', image: 'ruby:3.2-slim' },
 ];
 
+const MAX_TERMINAL_LINES = 1000;
+
+const addLines = (prev: TerminalLine[], newLines: TerminalLine[]): TerminalLine[] => {
+    const combined = [...prev, ...newLines];
+    return combined.length > MAX_TERMINAL_LINES
+        ? combined.slice(combined.length - MAX_TERMINAL_LINES)
+        : combined;
+};
+
 const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, workspacePath }, ref) => {
     const [lines, setLines] = useState<TerminalLine[]>([
         { type: 'system', content: 'Docker IDE Terminal' },
@@ -40,6 +49,10 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
     const [showShellPicker, setShowShellPicker] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
     const terminalRef = useRef<HTMLDivElement>(null);
+
+    const appendLine = useCallback((type: TerminalLine['type'], content: string) => {
+        setLines(prev => addLines(prev, [{ type, content }]));
+    }, []);
 
     const connectToProject = async () => {
         if (shellActive || !workspacePath) return;

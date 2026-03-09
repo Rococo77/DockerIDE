@@ -210,8 +210,8 @@ export class ProjectContainerManager extends EventEmitter {
                 Binds: [`${config.projectPath}:/workspace`],
                 // No AutoRemove - we want persistent containers
                 NetworkMode: 'bridge',
-                Memory: 512 * 1024 * 1024, // 512MB
-                MemorySwap: 512 * 1024 * 1024,
+                Memory: 256 * 1024 * 1024, // 256MB default
+                MemorySwap: 512 * 1024 * 1024, // 512MB swap
             },
         });
 
