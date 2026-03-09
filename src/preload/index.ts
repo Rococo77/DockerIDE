@@ -137,6 +137,18 @@ const api = {
             return () => ipcRenderer.removeListener('shell:closed', handler);
         },
     },
+    compose: {
+        hasFile: (projectPath: string) => ipcRenderer.invoke('compose:has-file', projectPath),
+        up: (projectPath: string, options?: { build?: boolean }) =>
+            ipcRenderer.invoke('compose:up', projectPath, options),
+        down: (projectPath: string, options?: { removeVolumes?: boolean }) =>
+            ipcRenderer.invoke('compose:down', projectPath, options),
+        ps: (projectPath: string) => ipcRenderer.invoke('compose:ps', projectPath),
+        logs: (projectPath: string, options?: { service?: string; tail?: number }) =>
+            ipcRenderer.invoke('compose:logs', projectPath, options),
+        restart: (projectPath: string, service?: string) =>
+            ipcRenderer.invoke('compose:restart', projectPath, service),
+    },
     // Wait for main:ready signal
     whenReady: () => mainReadyPromise,
     onMainReady: (callback: (data?: any) => void) => ipcRenderer.on('main:ready', (_ev, data) => callback(data)),

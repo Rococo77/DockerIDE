@@ -1286,6 +1286,187 @@ rails server -b 0.0.0.0
             },
         ],
     },
+    // =========================================
+    // Docker Compose - Multi-service projects
+    // =========================================
+    {
+        id: 'compose',
+        name: 'Docker Compose',
+        icon: 'DC',
+        image: 'docker:cli',
+        description: 'Multi-service projects with docker-compose',
+        templates: [
+            {
+                id: 'compose-web-db',
+                name: 'Web + Database',
+                description: 'Web application with PostgreSQL database',
+                files: [
+                    {
+                        path: 'docker-compose.yml',
+                        content: `services:
+  app:
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - .:/app
+    ports:
+      - "3000:3000"
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgres://user:password@db:5432/app
+    command: sh -c "npm install && node index.js"
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: app
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+volumes:
+  db_data:
+`,
+                    },
+                    {
+                        path: 'index.js',
+                        content: `const http = require('http');
+
+const server = http.createServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+        message: 'Hello from Docker Compose!',
+        database: process.env.DATABASE_URL ? 'configured' : 'not configured',
+    }));
+});
+
+server.listen(3000, '0.0.0.0', () => {
+    console.log('Server running on http://localhost:3000');
+});
+`,
+                    },
+                    {
+                        path: 'package.json',
+                        content: JSON.stringify({
+                            name: 'compose-app',
+                            version: '1.0.0',
+                            main: 'index.js',
+                            scripts: { start: 'node index.js' },
+                        }, null, 2),
+                    },
+                    {
+                        path: '.docker-ide.json',
+                        content: JSON.stringify({
+                            language: 'javascript',
+                            image: 'node:20-alpine',
+                            compose: true,
+                        }, null, 2),
+                    },
+                ],
+            },
+            {
+                id: 'compose-fullstack',
+                name: 'Fullstack (Front + Back + DB)',
+                description: 'Frontend, backend API, and database',
+                files: [
+                    {
+                        path: 'docker-compose.yml',
+                        content: `services:
+  frontend:
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+    ports:
+      - "5173:5173"
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+
+  backend:
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - ./backend:/app
+    ports:
+      - "3000:3000"
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgres://user:password@db:5432/app
+    command: sh -c "npm install && node index.js"
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: app
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+volumes:
+  db_data:
+`,
+                    },
+                    {
+                        path: 'backend/index.js',
+                        content: `const http = require('http');
+
+const server = http.createServer((req, res) => {
+    res.writeHead(200, {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+    });
+    res.end(JSON.stringify({ message: 'Backend API running' }));
+});
+
+server.listen(3000, '0.0.0.0', () => {
+    console.log('Backend running on port 3000');
+});
+`,
+                    },
+                    {
+                        path: 'backend/package.json',
+                        content: JSON.stringify({
+                            name: 'backend',
+                            version: '1.0.0',
+                            main: 'index.js',
+                            scripts: { start: 'node index.js' },
+                        }, null, 2),
+                    },
+                    {
+                        path: 'frontend/index.html',
+                        content: `<!DOCTYPE html>
+<html>
+<head><title>App</title></head>
+<body>
+  <h1>Fullstack Docker Compose App</h1>
+  <div id="api-response"></div>
+  <script>
+    fetch('http://localhost:3000')
+      .then(r => r.json())
+      .then(data => {
+        document.getElementById('api-response').textContent = JSON.stringify(data);
+      });
+  </script>
+</body>
+</html>`,
+                    },
+                    {
+                        path: '.docker-ide.json',
+                        content: JSON.stringify({
+                            language: 'javascript',
+                            image: 'node:20-alpine',
+                            compose: true,
+                        }, null, 2),
+                    },
+                ],
+            },
+        ],
+    },
 ];
 
 const ProjectCreatorModal: React.FC<ProjectCreatorProps> = ({
