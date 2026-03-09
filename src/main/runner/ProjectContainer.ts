@@ -169,7 +169,7 @@ export class ProjectContainerManager extends EventEmitter {
         this.emit('status', { 
             projectPath: config.projectPath, 
             status: 'creating',
-            message: `🐳 Création du conteneur ${containerName}...`
+            message: `Creating container ${containerName}...`
         });
 
         // Ensure image exists
@@ -179,7 +179,7 @@ export class ProjectContainerManager extends EventEmitter {
             this.emit('status', { 
                 projectPath: config.projectPath, 
                 status: 'pulling',
-                message: `📥 Téléchargement de l'image ${config.image}...`
+                message: `Downloading image ${config.image}...`
             });
 
             await new Promise<void>((resolve, reject) => {
@@ -224,11 +224,27 @@ export class ProjectContainerManager extends EventEmitter {
         };
 
         this.containers.set(containerName, containerInfo);
-        
-        this.emit('status', { 
-            projectPath: config.projectPath, 
+
+        // Install build tools for compiled languages using alpine images
+        if (config.image.startsWith('alpine:') && (config.language === 'c' || config.language === 'cpp')) {
+            await container.start();
+            containerInfo.status = 'running';
+            const setupExec = await container.exec({
+                Cmd: ['sh', '-c', 'apk add --no-cache gcc g++ musl-dev make'],
+                AttachStdout: true,
+                AttachStderr: true,
+            });
+            const setupStream = await setupExec.start({ hijack: true, stdin: false });
+            await new Promise<void>((resolve) => {
+                setupStream.on('end', resolve);
+                setupStream.on('error', () => resolve());
+            });
+        }
+
+        this.emit('status', {
+            projectPath: config.projectPath,
             status: 'created',
-            message: `✅ Conteneur ${containerName} créé`
+            message: `Container ${containerName} ready`
         });
 
         return containerInfo;

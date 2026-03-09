@@ -19,72 +19,165 @@ interface RunConfig {
 }
 
 // Mapping des langages vers les configurations Docker
+// Language configs with optimized images (alpine/slim variants to reduce pull size)
 const LANGUAGE_CONFIGS: Record<string, {
     image: string;
     command: (filePath: string) => string[];
     fileExtensions: string[];
+    // Optimized Dockerfile template for production builds
+    dockerfile?: (entryFile: string) => string;
 }> = {
     python: {
-        image: 'python:3.11-slim',
+        image: 'python:3.11-alpine',
         command: (file) => ['python', file],
         fileExtensions: ['py'],
+        dockerfile: (entry) => `FROM python:3.11-alpine AS base
+WORKDIR /app
+COPY requirements.txt* ./
+RUN pip install --no-cache-dir -r requirements.txt 2>/dev/null || true
+COPY . .
+CMD ["python", "${entry}"]`,
     },
     javascript: {
         image: 'node:20-alpine',
         command: (file) => ['node', file],
         fileExtensions: ['js', 'mjs'],
+        dockerfile: (entry) => `FROM node:20-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --production 2>/dev/null || true
+COPY . .
+CMD ["node", "${entry}"]`,
     },
     typescript: {
         image: 'node:20-alpine',
         command: (file) => ['npx', 'ts-node', file],
         fileExtensions: ['ts'],
+        dockerfile: (entry) => `FROM node:20-alpine AS build
+WORKDIR /app
+COPY package*.json tsconfig*.json ./
+RUN npm ci
+COPY . .
+RUN npx tsc
+
+FROM node:20-alpine
+WORKDIR /app
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/package*.json ./
+RUN npm ci --production
+CMD ["node", "dist/${entry.replace('.ts', '.js')}"]`,
     },
     java: {
-        image: 'eclipse-temurin:17-jdk',
+        image: 'eclipse-temurin:17-jdk-alpine',
         command: (file) => {
             const className = path.basename(file, '.java');
-            return ['sh', '-c', `javac ${file} && java ${className}`];
+            return ['sh', '-c', `javac ${file} && java -cp $(dirname ${file}) ${className}`];
         },
         fileExtensions: ['java'],
+        dockerfile: (entry) => {
+            const className = path.basename(entry, '.java');
+            return `FROM eclipse-temurin:17-jdk-alpine AS build
+WORKDIR /app
+COPY . .
+RUN javac ${entry}
+
+FROM eclipse-temurin:17-jre-alpine
+WORKDIR /app
+COPY --from=build /app/*.class .
+CMD ["java", "${className}"]`;
+        },
     },
     go: {
-        image: 'golang:1.21-alpine',
+        image: 'golang:1.22-alpine',
         command: (file) => ['go', 'run', file],
         fileExtensions: ['go'],
+        dockerfile: (entry) => `FROM golang:1.22-alpine AS build
+WORKDIR /app
+COPY go.* ./
+RUN go mod download 2>/dev/null || true
+COPY . .
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /app/main ${entry}
+
+FROM scratch
+COPY --from=build /app/main /main
+ENTRYPOINT ["/main"]`,
     },
     rust: {
-        image: 'rust:1.73-slim',
+        image: 'rust:1.75-alpine',
         command: (file) => {
             const outputName = path.basename(file, '.rs');
             return ['sh', '-c', `rustc ${file} -o /tmp/${outputName} && /tmp/${outputName}`];
         },
         fileExtensions: ['rs'],
+        dockerfile: (entry) => `FROM rust:1.75-alpine AS build
+WORKDIR /app
+RUN apk add --no-cache musl-dev
+COPY . .
+RUN cargo build --release 2>/dev/null || rustc -O ${entry} -o /app/main
+
+FROM alpine:3.19
+COPY --from=build /app/target/release/* /app/main* /usr/local/bin/
+ENTRYPOINT ["main"]`,
     },
     ruby: {
-        image: 'ruby:3.2-slim',
+        image: 'ruby:3.2-alpine',
         command: (file) => ['ruby', file],
         fileExtensions: ['rb'],
+        dockerfile: (entry) => `FROM ruby:3.2-alpine
+WORKDIR /app
+COPY Gemfile* ./
+RUN bundle install 2>/dev/null || true
+COPY . .
+CMD ["ruby", "${entry}"]`,
     },
     php: {
-        image: 'php:8.2-cli',
+        image: 'php:8.2-cli-alpine',
         command: (file) => ['php', file],
         fileExtensions: ['php'],
+        dockerfile: (entry) => `FROM php:8.2-cli-alpine
+WORKDIR /app
+COPY . .
+CMD ["php", "${entry}"]`,
     },
     c: {
-        image: 'gcc:13',
+        image: 'alpine:3.19',
         command: (file) => {
             const outputName = path.basename(file, '.c');
-            return ['sh', '-c', `gcc ${file} -o /tmp/${outputName} && /tmp/${outputName}`];
+            return ['sh', '-c', `gcc ${file} -o /tmp/${outputName} -static && /tmp/${outputName}`];
         },
         fileExtensions: ['c'],
+        dockerfile: (entry) => {
+            const outputName = path.basename(entry, '.c');
+            return `FROM alpine:3.19 AS build
+RUN apk add --no-cache gcc musl-dev
+WORKDIR /app
+COPY . .
+RUN gcc -O2 -static ${entry} -o ${outputName}
+
+FROM scratch
+COPY --from=build /app/${outputName} /${outputName}
+ENTRYPOINT ["/${outputName}"]`;
+        },
     },
     cpp: {
-        image: 'gcc:13',
+        image: 'alpine:3.19',
         command: (file) => {
             const outputName = path.basename(file, '.cpp');
-            return ['sh', '-c', `g++ ${file} -o /tmp/${outputName} && /tmp/${outputName}`];
+            return ['sh', '-c', `g++ ${file} -o /tmp/${outputName} -static && /tmp/${outputName}`];
         },
         fileExtensions: ['cpp', 'cc', 'cxx'],
+        dockerfile: (entry) => {
+            const outputName = path.basename(entry, '.cpp');
+            return `FROM alpine:3.19 AS build
+RUN apk add --no-cache g++ musl-dev
+WORKDIR /app
+COPY . .
+RUN g++ -O2 -static ${entry} -o ${outputName}
+
+FROM scratch
+COPY --from=build /app/${outputName} /${outputName}
+ENTRYPOINT ["/${outputName}"]`;
+        },
     },
 };
 
@@ -140,9 +233,9 @@ export class CodeRunner {
                 return true;
             }
 
-            onProgress?.(`Téléchargement de l'image ${imageName}...`);
+            onProgress?.(`Downloading image ${imageName}...`);
             await this.imageManager.pullImage(imageName);
-            onProgress?.(`Image ${imageName} prête`);
+            onProgress?.(`Image ${imageName} ready`);
             return true;
         } catch (error: any) {
             console.error('Error ensuring image:', error);
@@ -223,7 +316,7 @@ export class CodeRunner {
             return {
                 success: false,
                 output: '',
-                error: error.message || 'Erreur inconnue',
+                error: error.message || 'Unknown error',
                 executionTime,
             };
         }
@@ -234,6 +327,15 @@ export class CodeRunner {
      */
     getSupportedLanguages(): string[] {
         return Object.keys(LANGUAGE_CONFIGS);
+    }
+
+    /**
+     * Generate an optimized multi-stage Dockerfile for a project
+     */
+    generateDockerfile(language: string, entryFile: string): string | null {
+        const config = LANGUAGE_CONFIGS[language];
+        if (!config?.dockerfile) return null;
+        return config.dockerfile(entryFile);
     }
 
     /**
@@ -354,7 +456,7 @@ export class CodeRunner {
             return {
                 success: false,
                 output: '',
-                error: error.message || 'Erreur inconnue',
+                error: error.message || 'Unknown error',
                 executionTime,
             };
         }
