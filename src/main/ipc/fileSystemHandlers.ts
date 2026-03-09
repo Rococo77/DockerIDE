@@ -1,12 +1,28 @@
 import { ipcMain, dialog, BrowserWindow } from 'electron';
+import * as path from 'path';
 import { FileSystemManager } from '../fs/FileSystemManager';
+import { handleIpc } from './ipcHelper';
+
+/**
+ * Validate that a string is a valid file path and does not contain
+ * null bytes or other dangerous patterns.
+ */
+function sanitizePath(inputPath: string): string {
+    if (typeof inputPath !== 'string' || inputPath.length === 0) {
+        throw new Error('Invalid path: must be a non-empty string');
+    }
+    if (inputPath.includes('\0')) {
+        throw new Error('Invalid path: contains null bytes');
+    }
+    return path.normalize(inputPath);
+}
 
 export function registerFileSystemHandlers(): void {
     const fsManager = FileSystemManager.getInstance();
 
     console.log('[FileSystem] Registering file system IPC handlers...');
 
-    // Open folder dialog
+    // Open folder dialog - special case, needs dialog API
     ipcMain.handle('fs:open-folder', async () => {
         const mainWindow = BrowserWindow.getAllWindows()[0];
         const result = await dialog.showOpenDialog(mainWindow, {
@@ -22,109 +38,59 @@ export function registerFileSystemHandlers(): void {
         return { success: false, path: null };
     });
 
-    // Get current workspace
-    ipcMain.handle('fs:get-workspace', async () => {
-        return fsManager.getWorkspace();
+    handleIpc('fs:get-workspace', () => fsManager.getWorkspace());
+
+    handleIpc('fs:set-workspace', (workspacePath: string) => {
+        fsManager.setWorkspace(workspacePath);
+        return { success: true };
     });
 
-    // Set workspace
-    ipcMain.handle('fs:set-workspace', async (_, workspacePath: string) => {
-        try {
-            fsManager.setWorkspace(workspacePath);
-            return { success: true };
-        } catch (error: any) {
-            return { success: false, error: error.message };
-        }
+    handleIpc('fs:read-directory', async (dirPath: string, depth?: number) => {
+        const files = await fsManager.readDirectory(sanitizePath(dirPath), depth);
+        return { success: true, files };
     });
 
-    // Read directory
-    ipcMain.handle('fs:read-directory', async (_, dirPath: string, depth?: number) => {
-        try {
-            const files = await fsManager.readDirectory(dirPath, depth);
-            return { success: true, files };
-        } catch (error: any) {
-            return { success: false, error: error.message };
-        }
+    handleIpc('fs:read-file', async (filePath: string) => {
+        const fileContent = await fsManager.readFile(sanitizePath(filePath));
+        return { success: true, ...fileContent };
     });
 
-    // Read file
-    ipcMain.handle('fs:read-file', async (_, filePath: string) => {
-        try {
-            const fileContent = await fsManager.readFile(filePath);
-            return { success: true, ...fileContent };
-        } catch (error: any) {
-            return { success: false, error: error.message };
-        }
+    handleIpc('fs:write-file', async (filePath: string, content: string) => {
+        await fsManager.writeFile(sanitizePath(filePath), content);
+        return { success: true };
     });
 
-    // Write file
-    ipcMain.handle('fs:write-file', async (_, filePath: string, content: string) => {
-        try {
-            await fsManager.writeFile(filePath, content);
-            return { success: true };
-        } catch (error: any) {
-            return { success: false, error: error.message };
-        }
+    handleIpc('fs:create-file', async (filePath: string, content?: string) => {
+        await fsManager.createFile(sanitizePath(filePath), content);
+        return { success: true };
     });
 
-    // Create file
-    ipcMain.handle('fs:create-file', async (_, filePath: string, content?: string) => {
-        try {
-            await fsManager.createFile(filePath, content);
-            return { success: true };
-        } catch (error: any) {
-            return { success: false, error: error.message };
-        }
+    handleIpc('fs:create-directory', async (dirPath: string) => {
+        await fsManager.createDirectory(sanitizePath(dirPath));
+        return { success: true };
     });
 
-    // Create directory
-    ipcMain.handle('fs:create-directory', async (_, dirPath: string) => {
-        try {
-            await fsManager.createDirectory(dirPath);
-            return { success: true };
-        } catch (error: any) {
-            return { success: false, error: error.message };
-        }
+    handleIpc('fs:delete', async (itemPath: string) => {
+        await fsManager.delete(sanitizePath(itemPath));
+        return { success: true };
     });
 
-    // Delete file or directory
-    ipcMain.handle('fs:delete', async (_, itemPath: string) => {
-        try {
-            await fsManager.delete(itemPath);
-            return { success: true };
-        } catch (error: any) {
-            return { success: false, error: error.message };
-        }
+    handleIpc('fs:rename', async (oldPath: string, newPath: string) => {
+        await fsManager.rename(sanitizePath(oldPath), sanitizePath(newPath));
+        return { success: true };
     });
 
-    // Rename file or directory
-    ipcMain.handle('fs:rename', async (_, oldPath: string, newPath: string) => {
-        try {
-            await fsManager.rename(oldPath, newPath);
-            return { success: true };
-        } catch (error: any) {
-            return { success: false, error: error.message };
-        }
+    handleIpc('fs:exists', async (itemPath: string) => {
+        const exists = await fsManager.exists(sanitizePath(itemPath));
+        return { success: true, exists };
     });
 
-    // Check if path exists
-    ipcMain.handle('fs:exists', async (_, itemPath: string) => {
-        try {
-            const exists = await fsManager.exists(itemPath);
-            return { success: true, exists };
-        } catch (error: any) {
-            return { success: false, error: error.message };
-        }
-    });
-
-    // Get language from file extension
-    ipcMain.handle('fs:get-language', async (_, filePath: string) => {
+    handleIpc('fs:get-language', (filePath: string) => {
         const language = fsManager.getLanguageFromExtension(filePath);
         return { language };
     });
 
-    // Get Docker image for language
-    ipcMain.handle('fs:get-docker-image', async (_, language: string) => {
+    handleIpc('fs:get-docker-image', (language: string) => {
         const image = fsManager.getDockerImageForLanguage(language);
         return { image };
     });

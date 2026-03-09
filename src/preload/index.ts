@@ -22,6 +22,13 @@ ipcRenderer.on('main:ready', (_event, data) => {
     }
 });
 
+// Helper: create a listener that returns a cleanup function
+function onIpcEvent<T>(channel: string, callback: (data: T) => void): () => void {
+    const handler = (_ev: any, data: T) => callback(data);
+    ipcRenderer.on(channel, handler);
+    return () => ipcRenderer.removeListener(channel, handler);
+}
+
 // API exposée au renderer de manière sécurisée
 const api = {
     docker: {
@@ -76,26 +83,16 @@ const api = {
         // Ensure image is pulled
         ensureImage: (imageName: string) => ipcRenderer.invoke('runner:ensure-image', imageName),
         // Listen for progress updates (returns cleanup function)
-        onProgress: (callback: (data: { status: string }) => void) => {
-            const handler = (_ev: any, data: any) => callback(data);
-            ipcRenderer.on('runner:progress', handler);
-            return () => ipcRenderer.removeListener('runner:progress', handler);
-        },
+        onProgress: (callback: (data: { status: string }) => void) =>
+            onIpcEvent('runner:progress', callback),
         // Setup framework in project
         setupFramework: (config: { projectPath: string; image: string; installCommand: string }) =>
             ipcRenderer.invoke('runner:setup-framework', config),
         // Listen for setup progress (returns cleanup function)
-        onSetupProgress: (callback: (data: { status: string; type: string }) => void) => {
-            const handler = (_ev: any, data: any) => callback(data);
-            ipcRenderer.on('runner:setup-progress', handler);
-            return () => ipcRenderer.removeListener('runner:setup-progress', handler);
-        },
-        // Listen for setup output (returns cleanup function)
-        onSetupOutput: (callback: (data: { data: string; type: string }) => void) => {
-            const handler = (_ev: any, data: any) => callback(data);
-            ipcRenderer.on('runner:setup-output', handler);
-            return () => ipcRenderer.removeListener('runner:setup-output', handler);
-        },
+        onSetupProgress: (callback: (data: { status: string; type: string }) => void) =>
+            onIpcEvent('runner:setup-progress', callback),
+        onSetupOutput: (callback: (data: { data: string; type: string }) => void) =>
+            onIpcEvent('runner:setup-output', callback),
         // Project container management
         getProjectContainer: (projectPath: string) => 
             ipcRenderer.invoke('runner:get-project-container', projectPath),
@@ -125,17 +122,10 @@ const api = {
         resize: (shellId: string, cols: number, rows: number) =>
             ipcRenderer.invoke('shell:resize', { shellId, cols, rows }),
         // Listen for shell messages (returns cleanup function)
-        onMessage: (callback: (data: { shellId: string; type: string; data: string }) => void) => {
-            const handler = (_ev: any, data: any) => callback(data);
-            ipcRenderer.on('shell:message', handler);
-            return () => ipcRenderer.removeListener('shell:message', handler);
-        },
-        // Listen for shell close (returns cleanup function)
-        onClosed: (callback: (data: { shellId: string }) => void) => {
-            const handler = (_ev: any, data: any) => callback(data);
-            ipcRenderer.on('shell:closed', handler);
-            return () => ipcRenderer.removeListener('shell:closed', handler);
-        },
+        onMessage: (callback: (data: { shellId: string; type: string; data: string }) => void) =>
+            onIpcEvent('shell:message', callback),
+        onClosed: (callback: (data: { shellId: string }) => void) =>
+            onIpcEvent('shell:closed', callback),
     },
     compose: {
         hasFile: (projectPath: string) => ipcRenderer.invoke('compose:has-file', projectPath),

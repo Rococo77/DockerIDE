@@ -18,7 +18,20 @@ interface RunConfig {
     language: string;
 }
 
-// Mapping des langages vers les configurations Docker
+// Helper for C/C++ Dockerfile generation (avoids duplication)
+function nativeDockerfile(compiler: string, packages: string, entry: string, ext: string): string {
+    const outputName = path.basename(entry, ext);
+    return `FROM alpine:3.19 AS build
+RUN apk add --no-cache ${packages}
+WORKDIR /app
+COPY . .
+RUN ${compiler} -O2 -static ${entry} -o ${outputName}
+
+FROM scratch
+COPY --from=build /app/${outputName} /${outputName}
+ENTRYPOINT ["/${outputName}"]`;
+}
+
 // Language configs with optimized images (alpine/slim variants to reduce pull size)
 const LANGUAGE_CONFIGS: Record<string, {
     image: string;
@@ -146,18 +159,7 @@ CMD ["php", "${entry}"]`,
             return ['sh', '-c', `gcc ${file} -o /tmp/${outputName} -static && /tmp/${outputName}`];
         },
         fileExtensions: ['c'],
-        dockerfile: (entry) => {
-            const outputName = path.basename(entry, '.c');
-            return `FROM alpine:3.19 AS build
-RUN apk add --no-cache gcc musl-dev
-WORKDIR /app
-COPY . .
-RUN gcc -O2 -static ${entry} -o ${outputName}
-
-FROM scratch
-COPY --from=build /app/${outputName} /${outputName}
-ENTRYPOINT ["/${outputName}"]`;
-        },
+        dockerfile: (entry) => nativeDockerfile('gcc', 'gcc musl-dev', entry, '.c'),
     },
     cpp: {
         image: 'alpine:3.19',
@@ -166,18 +168,7 @@ ENTRYPOINT ["/${outputName}"]`;
             return ['sh', '-c', `g++ ${file} -o /tmp/${outputName} -static && /tmp/${outputName}`];
         },
         fileExtensions: ['cpp', 'cc', 'cxx'],
-        dockerfile: (entry) => {
-            const outputName = path.basename(entry, '.cpp');
-            return `FROM alpine:3.19 AS build
-RUN apk add --no-cache g++ musl-dev
-WORKDIR /app
-COPY . .
-RUN g++ -O2 -static ${entry} -o ${outputName}
-
-FROM scratch
-COPY --from=build /app/${outputName} /${outputName}
-ENTRYPOINT ["/${outputName}"]`;
-        },
+        dockerfile: (entry) => nativeDockerfile('g++', 'g++ musl-dev', entry, '.cpp'),
     },
 };
 

@@ -245,6 +245,24 @@ export class ComposeManager {
         }
     }
 
+    /** Shared Postgres service block to avoid template duplication */
+    private static postgresBlock(withPorts = false): string {
+        let block = `  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: \${POSTGRES_USER:-app_user}
+      POSTGRES_PASSWORD: \${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: \${POSTGRES_DB:-app}
+    volumes:
+      - db_data:/var/lib/postgresql/data`;
+        if (withPorts) {
+            block += `
+    ports:
+      - "5432:5432"`;
+        }
+        return block;
+    }
+
     private static webDbTemplate(language: string): string {
         const imageMap: Record<string, string> = {
             python: 'python:3.11-alpine',
@@ -269,18 +287,11 @@ export class ComposeManager {
     depends_on:
       - db
     environment:
-      DATABASE_URL: postgres://user:password@db:5432/app
+      DATABASE_URL: \${DATABASE_URL:-postgres://app_user:changeme@db:5432/app}
+    env_file:
+      - .env
 
-  db:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: app
-    volumes:
-      - db_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+${ComposeManager.postgresBlock(true)}
 
 volumes:
   db_data:
@@ -308,17 +319,12 @@ volumes:
     depends_on:
       - db
     environment:
-      DATABASE_URL: postgres://user:password@db:5432/app
+      DATABASE_URL: \${DATABASE_URL:-postgres://app_user:changeme@db:5432/app}
+    env_file:
+      - .env
     command: sh -c "npm install && npm start"
 
-  db:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: app
-    volumes:
-      - db_data:/var/lib/postgresql/data
+${ComposeManager.postgresBlock(false)}
 
 volumes:
   db_data:
