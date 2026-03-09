@@ -75,9 +75,40 @@ const api = {
         checkImage: (imageName: string) => ipcRenderer.invoke('runner:check-image', imageName),
         // Ensure image is pulled
         ensureImage: (imageName: string) => ipcRenderer.invoke('runner:ensure-image', imageName),
-        // Listen for progress updates
-        onProgress: (callback: (data: { status: string }) => void) =>
-            ipcRenderer.on('runner:progress', (_ev, data) => callback(data)),
+        // Listen for progress updates (returns cleanup function)
+        onProgress: (callback: (data: { status: string }) => void) => {
+            const handler = (_ev: any, data: any) => callback(data);
+            ipcRenderer.on('runner:progress', handler);
+            return () => ipcRenderer.removeListener('runner:progress', handler);
+        },
+        // Setup framework in project
+        setupFramework: (config: { projectPath: string; image: string; installCommand: string }) =>
+            ipcRenderer.invoke('runner:setup-framework', config),
+        // Listen for setup progress (returns cleanup function)
+        onSetupProgress: (callback: (data: { status: string; type: string }) => void) => {
+            const handler = (_ev: any, data: any) => callback(data);
+            ipcRenderer.on('runner:setup-progress', handler);
+            return () => ipcRenderer.removeListener('runner:setup-progress', handler);
+        },
+        // Listen for setup output (returns cleanup function)
+        onSetupOutput: (callback: (data: { data: string; type: string }) => void) => {
+            const handler = (_ev: any, data: any) => callback(data);
+            ipcRenderer.on('runner:setup-output', handler);
+            return () => ipcRenderer.removeListener('runner:setup-output', handler);
+        },
+        // Project container management
+        getProjectContainer: (projectPath: string) => 
+            ipcRenderer.invoke('runner:get-project-container', projectPath),
+        stopProjectContainer: (projectPath: string) => 
+            ipcRenderer.invoke('runner:stop-project-container', projectPath),
+        removeProjectContainer: (projectPath: string) => 
+            ipcRenderer.invoke('runner:remove-project-container', projectPath),
+        isContainerRunning: (projectPath: string) => 
+            ipcRenderer.invoke('runner:is-container-running', projectPath),
+        listProjectContainers: () => 
+            ipcRenderer.invoke('runner:list-project-containers'),
+        stopAllContainers: () => 
+            ipcRenderer.invoke('runner:stop-all-containers'),
     },
     shell: {
         // Start an interactive shell
@@ -93,12 +124,30 @@ const api = {
         // Resize shell terminal
         resize: (shellId: string, cols: number, rows: number) =>
             ipcRenderer.invoke('shell:resize', { shellId, cols, rows }),
-        // Listen for shell messages
-        onMessage: (callback: (data: { shellId: string; type: string; data: string }) => void) =>
-            ipcRenderer.on('shell:message', (_ev, data) => callback(data)),
-        // Listen for shell close
-        onClosed: (callback: (data: { shellId: string }) => void) =>
-            ipcRenderer.on('shell:closed', (_ev, data) => callback(data)),
+        // Listen for shell messages (returns cleanup function)
+        onMessage: (callback: (data: { shellId: string; type: string; data: string }) => void) => {
+            const handler = (_ev: any, data: any) => callback(data);
+            ipcRenderer.on('shell:message', handler);
+            return () => ipcRenderer.removeListener('shell:message', handler);
+        },
+        // Listen for shell close (returns cleanup function)
+        onClosed: (callback: (data: { shellId: string }) => void) => {
+            const handler = (_ev: any, data: any) => callback(data);
+            ipcRenderer.on('shell:closed', handler);
+            return () => ipcRenderer.removeListener('shell:closed', handler);
+        },
+    },
+    compose: {
+        hasFile: (projectPath: string) => ipcRenderer.invoke('compose:has-file', projectPath),
+        up: (projectPath: string, options?: { build?: boolean }) =>
+            ipcRenderer.invoke('compose:up', projectPath, options),
+        down: (projectPath: string, options?: { removeVolumes?: boolean }) =>
+            ipcRenderer.invoke('compose:down', projectPath, options),
+        ps: (projectPath: string) => ipcRenderer.invoke('compose:ps', projectPath),
+        logs: (projectPath: string, options?: { service?: string; tail?: number }) =>
+            ipcRenderer.invoke('compose:logs', projectPath, options),
+        restart: (projectPath: string, service?: string) =>
+            ipcRenderer.invoke('compose:restart', projectPath, service),
     },
     // Wait for main:ready signal
     whenReady: () => mainReadyPromise,

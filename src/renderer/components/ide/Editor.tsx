@@ -13,24 +13,24 @@ interface EditorProps {
 
 const getFileIcon = (language: string): string => {
     const iconMap: Record<string, string> = {
-        python: '🐍',
-        javascript: '📜',
-        typescript: '📘',
-        json: '📋',
-        markdown: '📝',
-        html: '🌐',
-        css: '🎨',
-        java: '☕',
-        go: '🐹',
-        rust: '🦀',
-        ruby: '💎',
-        php: '🐘',
-        c: '⚡',
-        cpp: '⚡',
-        dockerfile: '🐳',
+        python: 'PY',
+        javascript: 'JS',
+        typescript: 'TS',
+        json: '{}',
+        markdown: 'MD',
+        html: '<>',
+        css: '#',
+        java: 'JV',
+        go: 'GO',
+        rust: 'RS',
+        ruby: 'RB',
+        php: 'HP',
+        c: 'C',
+        cpp: 'C+',
+        dockerfile: 'DF',
     };
-    
-    return iconMap[language] || '📄';
+
+    return iconMap[language] || '--';
 };
 
 const Editor: React.FC<EditorProps> = ({
@@ -52,30 +52,36 @@ const Editor: React.FC<EditorProps> = ({
         return (
             <div className="editor-welcome">
                 <div className="welcome-content">
-                    <h1>🐳 Docker IDE</h1>
-                    <p>Environnement de développement containerisé</p>
+                    <h1>Docker IDE</h1>
+                    <p className="welcome-subtitle">Environnement de developpement containerise</p>
                     <div className="welcome-actions">
                         <div className="welcome-card">
-                            <span className="welcome-icon">📁</span>
+                            <div className="welcome-icon-wrap">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+                            </div>
                             <h3>Ouvrir un projet</h3>
-                            <p>Sélectionnez un dossier dans l'explorateur</p>
+                            <p>Selectionnez un dossier dans l'explorateur</p>
                         </div>
                         <div className="welcome-card">
-                            <span className="welcome-icon">🧩</span>
+                            <div className="welcome-icon-wrap">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/></svg>
+                            </div>
                             <h3>Installer des langages</h3>
-                            <p>Onglet Extensions → Python, Node.js, Java...</p>
+                            <p>Onglet Extensions pour Python, Node.js, Java...</p>
                         </div>
                         <div className="welcome-card">
-                            <span className="welcome-icon">🚀</span>
-                            <h3>Exécuter du code</h3>
-                            <p>F5 ou bouton Run → Exécution dans Docker</p>
+                            <div className="welcome-icon-wrap">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                            </div>
+                            <h3>Executer du code</h3>
+                            <p>F5 ou bouton Run pour lancer dans Docker</p>
                         </div>
                     </div>
                     <div className="shortcuts">
                         <h4>Raccourcis clavier</h4>
                         <div className="shortcut-list">
                             <div><kbd>Ctrl</kbd> + <kbd>S</kbd> Sauvegarder</div>
-                            <div><kbd>F5</kbd> Exécuter dans Docker</div>
+                            <div><kbd>F5</kbd> Executer dans Docker</div>
                             <div><kbd>Ctrl</kbd> + <kbd>`</kbd> Terminal</div>
                             <div><kbd>Ctrl</kbd> + <kbd>B</kbd> Sidebar</div>
                         </div>
@@ -94,7 +100,7 @@ const Editor: React.FC<EditorProps> = ({
             <div className="editor-toolbar">
                 <div className="toolbar-left">
                     <span className="current-file">
-                        <span className="file-icon">{fileIcon}</span>
+                        <span className="file-icon file-icon-text">{fileIcon}</span>
                         <span className="file-path">{filePath}</span>
                     </span>
                 </div>
@@ -105,14 +111,16 @@ const Editor: React.FC<EditorProps> = ({
                         disabled={!isModified}
                         title="Sauvegarder (Ctrl+S)"
                     >
-                        💾 Sauvegarder
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                        Sauvegarder
                     </button>
                     <button
                         className="toolbar-btn run-btn"
                         onClick={onRun}
-                        title="Exécuter (F5)"
+                        title="Executer (F5)"
                     >
-                        ▶️ Exécuter
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                        Executer
                     </button>
                 </div>
             </div>
@@ -148,10 +156,10 @@ const Editor: React.FC<EditorProps> = ({
                 <span className="status-item">{lineCount} lignes</span>
                 <span className="status-item">{language.toUpperCase()}</span>
                 <span className="status-item">UTF-8</span>
-                {isModified && <span className="status-item modified">● Modifié</span>}
+                {isModified && <span className="status-item modified">Modified</span>}
             </div>
         </div>
     );
 };
 
-export default Editor;
+export default React.memo(Editor);

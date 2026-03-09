@@ -1,6 +1,7 @@
 import { ipcMain, BrowserWindow } from 'electron';
 import { CodeRunner } from '../runner/CodeRunner';
 import { ShellManager, InteractiveShell } from '../runner/InteractiveShell';
+import { ComposeManager } from '../docker/ComposeManager';
 
 export function registerRunnerHandlers(): void {
     const runner = CodeRunner.getInstance();
@@ -177,6 +178,179 @@ export function registerRunnerHandlers(): void {
                 return { success: true };
             }
             return { success: false, error: 'Shell not running' };
+        } catch (error: any) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    // ===================================
+    // Framework Setup Handler
+    // ===================================
+
+    // Run framework installation
+    ipcMain.handle('runner:setup-framework', async (event, config: {
+        projectPath: string;
+        image: string;
+        installCommand: string;
+    }) => {
+        try {
+            const mainWindow = BrowserWindow.getAllWindows()[0];
+
+            // Progress callback
+            const onProgress = (status: string) => {
+                mainWindow?.webContents.send('runner:setup-progress', { 
+                    status,
+                    type: 'progress'
+                });
+            };
+
+            // Output callback - send real-time output
+            const onOutput = (data: string) => {
+                mainWindow?.webContents.send('runner:setup-output', { 
+                    data,
+                    type: 'output'
+                });
+            };
+
+            const result = await runner.runFrameworkSetup({
+                projectPath: config.projectPath,
+                image: config.image,
+                installCommand: config.installCommand,
+                onOutput,
+                onProgress,
+            });
+
+            return result;
+        } catch (error: any) {
+            return {
+                success: false,
+                output: '',
+                error: error.message,
+            };
+        }
+    });
+
+    // ===================================
+    // Project Container Management Handlers
+    // ===================================
+
+    // Get container info for a project
+    ipcMain.handle('runner:get-project-container', async (_, projectPath: string) => {
+        try {
+            const info = runner.getProjectContainerInfo(projectPath);
+            return { success: true, container: info || null };
+        } catch (error: any) {
+            return { success: false, error: error.message, container: null };
+        }
+    });
+
+    // Stop project container
+    ipcMain.handle('runner:stop-project-container', async (_, projectPath: string) => {
+        try {
+            await runner.stopProjectContainer(projectPath);
+            return { success: true };
+        } catch (error: any) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    // Remove project container
+    ipcMain.handle('runner:remove-project-container', async (_, projectPath: string) => {
+        try {
+            await runner.removeProjectContainer(projectPath);
+            return { success: true };
+        } catch (error: any) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    // Check if project container is running
+    ipcMain.handle('runner:is-container-running', async (_, projectPath: string) => {
+        try {
+            const running = runner.isProjectContainerRunning(projectPath);
+            return { success: true, running };
+        } catch (error: any) {
+            return { success: false, error: error.message, running: false };
+        }
+    });
+
+    // List all project containers
+    ipcMain.handle('runner:list-project-containers', async () => {
+        try {
+            const containers = runner.listProjectContainers();
+            return { success: true, containers };
+        } catch (error: any) {
+            return { success: false, error: error.message, containers: [] };
+        }
+    });
+
+    // Stop all project containers
+    ipcMain.handle('runner:stop-all-containers', async () => {
+        try {
+            await runner.stopAllProjectContainers();
+            return { success: true };
+        } catch (error: any) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    // === Docker Compose handlers ===
+    const compose = ComposeManager.getInstance();
+
+    ipcMain.handle('compose:has-file', async (_event, projectPath: string) => {
+        return { success: true, hasCompose: compose.hasComposeFile(projectPath) };
+    });
+
+    ipcMain.handle('compose:up', async (_event, projectPath: string, options?: { build?: boolean }) => {
+        try {
+            const result = await compose.up(projectPath, { detach: true, build: options?.build });
+            return { success: result.success, output: result.output, error: result.error };
+        } catch (error: any) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('compose:down', async (_event, projectPath: string, options?: { removeVolumes?: boolean }) => {
+        try {
+            const result = await compose.down(projectPath, options);
+            return { success: result.success, output: result.output, error: result.error };
+        } catch (error: any) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('compose:ps', async (_event, projectPath: string) => {
+        try {
+            const services = await compose.ps(projectPath);
+            return { success: true, services };
+        } catch (error: any) {
+            return { success: false, error: error.message, services: [] };
+        }
+    });
+
+    ipcMain.handle('compose:logs', async (_event, projectPath: string, options?: { service?: string; tail?: number }) => {
+        try {
+            const result = await compose.logs(projectPath, options);
+            return { success: result.success, output: result.output, error: result.error };
+        } catch (error: any) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('compose:restart', async (_event, projectPath: string, service?: string) => {
+        try {
+            const result = await compose.restart(projectPath, service);
+            return { success: result.success, output: result.output, error: result.error };
+        } catch (error: any) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    // Dockerfile generation
+    ipcMain.handle('runner:generate-dockerfile', async (_event, language: string, entryFile: string) => {
+        try {
+            const dockerfile = runner.generateDockerfile(language, entryFile);
+            return { success: !!dockerfile, dockerfile };
         } catch (error: any) {
             return { success: false, error: error.message };
         }

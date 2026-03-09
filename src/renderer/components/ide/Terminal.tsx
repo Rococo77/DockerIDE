@@ -16,20 +16,30 @@ export interface TerminalHandle {
     addLine: (type: TerminalLine['type'], content: string) => void;
     clear: () => void;
     runCode: (filePath: string, language: string) => Promise<void>;
+    connectToProject: () => Promise<void>;
+    isShellActive: () => boolean;
 }
 
-// Available shell options
 const SHELL_OPTIONS = [
-    { id: 'bash', name: 'Bash', icon: '🐚', image: 'alpine:latest' },
-    { id: 'python', name: 'Python', icon: '🐍', image: 'python:3.11-slim' },
-    { id: 'node', name: 'Node.js', icon: '📗', image: 'node:20-alpine' },
-    { id: 'ruby', name: 'Ruby IRB', icon: '💎', image: 'ruby:3.2-slim' },
+    { id: 'bash', name: 'Bash', image: 'alpine:latest' },
+    { id: 'python', name: 'Python', image: 'python:3.11-slim' },
+    { id: 'node', name: 'Node.js', image: 'node:20-alpine' },
+    { id: 'ruby', name: 'Ruby IRB', image: 'ruby:3.2-slim' },
 ];
+
+const MAX_TERMINAL_LINES = 1000;
+
+const addLines = (prev: TerminalLine[], newLines: TerminalLine[]): TerminalLine[] => {
+    const combined = [...prev, ...newLines];
+    return combined.length > MAX_TERMINAL_LINES
+        ? combined.slice(combined.length - MAX_TERMINAL_LINES)
+        : combined;
+};
 
 const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, workspacePath }, ref) => {
     const [lines, setLines] = useState<TerminalLine[]>([
-        { type: 'system', content: '🐳 Docker IDE Terminal' },
-        { type: 'system', content: 'Prêt à exécuter du code dans des conteneurs Docker.' },
+        { type: 'system', content: 'Docker IDE Terminal' },
+        { type: 'system', content: 'Ready.' },
     ]);
     const [currentInput, setCurrentInput] = useState('');
     const [isRunning, setIsRunning] = useState(false);
@@ -40,18 +50,89 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
     const inputRef = useRef<HTMLInputElement>(null);
     const terminalRef = useRef<HTMLDivElement>(null);
 
-    // Expose methods via ref
+    const appendLine = useCallback((type: TerminalLine['type'], content: string) => {
+        setLines(prev => addLines(prev, [{ type, content }]));
+    }, []);
+
+    const connectToProject = async () => {
+        if (shellActive || !workspacePath) return;
+
+        const newShellId = `shell-${Date.now()}`;
+        setShellId(newShellId);
+        setLines([
+            { type: 'system', content: 'Docker IDE Terminal' },
+            { type: 'system', content: `Project: ${workspacePath}` },
+            { type: 'system', content: 'Detecting configuration...' },
+        ]);
+
+        try {
+            let projectImage = 'alpine:latest';
+            let projectLanguage = 'bash';
+
+            try {
+                const configPath = `${workspacePath}/.docker-ide.json`;
+                const configResult = await window.electronAPI.fs.readFile(configPath);
+                if (configResult.success && configResult.content) {
+                    const config = JSON.parse(configResult.content);
+                    if (config.image) projectImage = config.image;
+                    if (config.language) projectLanguage = config.language;
+                    if (config.framework) {
+                        setLines(prev => [...prev, {
+                            type: 'system',
+                            content: `Framework: ${config.framework}`
+                        }]);
+                    }
+                }
+            } catch {
+                setLines(prev => [...prev, {
+                    type: 'system',
+                    content: 'No .docker-ide.json found, using default image'
+                }]);
+            }
+
+            setLines(prev => [...prev, {
+                type: 'system',
+                content: `Image: ${projectImage}`
+            }]);
+
+            const result = await window.electronAPI.shell.start({
+                shellId: newShellId,
+                image: projectImage,
+                language: projectLanguage,
+                workspacePath,
+            });
+
+            if (result.success) {
+                setShellActive(true);
+                setActiveTab('shell');
+                setLines(prev => [...prev, {
+                    type: 'success',
+                    content: 'Connected to Docker container'
+                }]);
+            } else {
+                setLines(prev => [...prev, {
+                    type: 'error',
+                    content: result.error || 'Connection error'
+                }]);
+            }
+        } catch (err: any) {
+            setLines(prev => [...prev, { type: 'error', content: err.message }]);
+        }
+    };
+
     useImperativeHandle(ref, () => ({
         addLine: (type: TerminalLine['type'], content: string) => {
             setLines(prev => [...prev, { type, content, timestamp: new Date() }]);
         },
         clear: () => {
-            setLines([{ type: 'system', content: '🐳 Terminal effacé' }]);
+            setLines([{ type: 'system', content: 'Terminal cleared' }]);
         },
         runCode: async (filePath: string, language: string) => {
             await executeInDocker(filePath, language);
         },
-    }));
+        connectToProject,
+        isShellActive: () => shellActive,
+    }), [shellActive, workspacePath]);
 
     useEffect(() => {
         if (visible && inputRef.current) {
@@ -65,24 +146,23 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
         }
     }, [lines]);
 
-    // Listen for progress updates from runner
     useEffect(() => {
         const handleProgress = (data: { status: string }) => {
             setLines(prev => [...prev, { type: 'system', content: data.status }]);
         };
 
-        window.electronAPI?.runner?.onProgress(handleProgress);
+        const cleanup = window.electronAPI?.runner?.onProgress(handleProgress);
+        return () => cleanup?.();
     }, []);
 
-    // Listen for shell messages
     useEffect(() => {
         const handleMessage = (data: { shellId: string; type: string; data: string }) => {
             if (data.shellId === shellId) {
-                const lineType = data.type === 'error' ? 'error' : 
+                const lineType = data.type === 'error' ? 'error' :
                                 data.type === 'system' ? 'system' : 'output';
-                setLines(prev => [...prev, { 
-                    type: lineType as TerminalLine['type'], 
-                    content: data.data 
+                setLines(prev => [...prev, {
+                    type: lineType as TerminalLine['type'],
+                    content: data.data
                 }]);
             }
         };
@@ -90,20 +170,24 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
         const handleClosed = (data: { shellId: string }) => {
             if (data.shellId === shellId) {
                 setShellActive(false);
-                setLines(prev => [...prev, { type: 'system', content: '🔌 Shell Docker fermé' }]);
+                setLines(prev => [...prev, { type: 'system', content: 'Shell closed' }]);
             }
         };
 
-        window.electronAPI?.shell?.onMessage(handleMessage);
-        window.electronAPI?.shell?.onClosed(handleClosed);
+        const cleanupMessage = window.electronAPI?.shell?.onMessage(handleMessage);
+        const cleanupClosed = window.electronAPI?.shell?.onClosed(handleClosed);
+
+        return () => {
+            cleanupMessage?.();
+            cleanupClosed?.();
+        };
     }, [shellId]);
 
-    // Start interactive shell
     const startShell = async (shellOption: typeof SHELL_OPTIONS[0]) => {
         const newShellId = `shell-${Date.now()}`;
         setShellId(newShellId);
         setShowShellPicker(false);
-        setLines([{ type: 'system', content: `🐳 Démarrage du shell ${shellOption.name}...` }]);
+        setLines([{ type: 'system', content: `Starting ${shellOption.name} shell...` }]);
 
         try {
             const result = await window.electronAPI.shell.start({
@@ -117,9 +201,9 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
                 setShellActive(true);
                 setActiveTab('shell');
             } else {
-                setLines(prev => [...prev, { 
-                    type: 'error', 
-                    content: result.error || 'Erreur au démarrage du shell' 
+                setLines(prev => [...prev, {
+                    type: 'error',
+                    content: result.error || 'Shell start error'
                 }]);
             }
         } catch (err: any) {
@@ -127,7 +211,6 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
         }
     };
 
-    // Stop interactive shell
     const stopShell = async () => {
         if (shellId) {
             await window.electronAPI.shell.stop(shellId);
@@ -139,7 +222,7 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
         if (!workspacePath) {
             setLines(prev => [...prev, {
                 type: 'error',
-                content: 'Aucun projet ouvert. Ouvrez un dossier d\'abord.',
+                content: 'No project open. Open a folder first.',
             }]);
             return;
         }
@@ -147,7 +230,7 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
         const fileName = filePath.split(/[/\\]/).pop() || filePath;
         setLines(prev => [...prev, {
             type: 'system',
-            content: `▶ Exécution de ${fileName} (${language})...`,
+            content: `> Running ${fileName} (${language})...`,
         }]);
         setIsRunning(true);
 
@@ -159,7 +242,6 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
             });
 
             if (result.success) {
-                // Show output
                 if (result.output) {
                     result.output.split('\n').forEach((line: string) => {
                         if (line.trim()) {
@@ -167,7 +249,6 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
                         }
                     });
                 }
-                // Show any stderr
                 if (result.error) {
                     result.error.split('\n').forEach((line: string) => {
                         if (line.trim()) {
@@ -175,23 +256,22 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
                         }
                     });
                 }
-                // Show execution time
                 if (result.executionTime) {
                     setLines(prev => [...prev, {
                         type: 'success',
-                        content: `✓ Exécution terminée en ${result.executionTime}ms (code: ${result.exitCode || 0})`,
+                        content: `Done in ${result.executionTime}ms (exit: ${result.exitCode || 0})`,
                     }]);
                 }
             } else {
                 setLines(prev => [...prev, {
                     type: 'error',
-                    content: `✗ Erreur: ${result.error || 'Erreur inconnue'}`,
+                    content: `Error: ${result.error || 'Unknown error'}`,
                 }]);
             }
         } catch (err: any) {
             setLines(prev => [...prev, {
                 type: 'error',
-                content: `✗ Erreur: ${err.message || err}`,
+                content: `Error: ${err.message || err}`,
             }]);
         } finally {
             setIsRunning(false);
@@ -201,30 +281,29 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
     const executeCommand = async (cmd: string) => {
         if (!cmd.trim()) return;
 
-        // If shell is active, send to shell
         if (shellActive && activeTab === 'shell') {
+            setLines(prev => [...prev, { type: 'input', content: `$ ${cmd}` }]);
             await window.electronAPI.shell.write(shellId, cmd);
             return;
         }
 
         setLines(prev => [...prev, { type: 'input', content: `$ ${cmd}` }]);
 
-        // Built-in commands
         if (cmd === 'clear') {
-            setLines([{ type: 'system', content: '🐳 Terminal effacé' }]);
+            setLines([{ type: 'system', content: 'Terminal cleared' }]);
             return;
         }
 
         if (cmd === 'help') {
             setLines(prev => [
                 ...prev,
-                { type: 'system', content: 'Commandes disponibles:' },
-                { type: 'output', content: '  run <file>     - Exécuter un fichier dans Docker' },
-                { type: 'output', content: '  shell          - Ouvrir un shell Docker interactif' },
-                { type: 'output', content: '  clear          - Effacer le terminal' },
-                { type: 'output', content: '  help           - Afficher cette aide' },
+                { type: 'system', content: 'Available commands:' },
+                { type: 'output', content: '  run <file>     Run a file in Docker' },
+                { type: 'output', content: '  shell          Open an interactive Docker shell' },
+                { type: 'output', content: '  clear          Clear the terminal' },
+                { type: 'output', content: '  help           Show this help' },
                 { type: 'output', content: '' },
-                { type: 'system', content: 'Ou utilisez le bouton "Exécuter" dans l\'éditeur (F5)' },
+                { type: 'system', content: 'Or use the Run button in the editor (F5)' },
             ]);
             return;
         }
@@ -234,29 +313,20 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
             return;
         }
 
-        // Run command
         if (cmd.startsWith('run ')) {
             const filePath = cmd.replace('run ', '').trim();
-            // Get language from extension
             const ext = filePath.split('.').pop()?.toLowerCase();
             const langMap: Record<string, string> = {
-                py: 'python',
-                js: 'javascript',
-                ts: 'typescript',
-                java: 'java',
-                go: 'go',
-                rs: 'rust',
-                rb: 'ruby',
-                php: 'php',
-                c: 'c',
-                cpp: 'cpp',
+                py: 'python', js: 'javascript', ts: 'typescript',
+                java: 'java', go: 'go', rs: 'rust',
+                rb: 'ruby', php: 'php', c: 'c', cpp: 'cpp',
             };
             const language = langMap[ext || ''] || 'plaintext';
-            
+
             if (language === 'plaintext') {
                 setLines(prev => [...prev, {
                     type: 'error',
-                    content: `Extension non reconnue: .${ext}`,
+                    content: `Unrecognized extension: .${ext}`,
                 }]);
                 return;
             }
@@ -268,7 +338,7 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
 
         setLines(prev => [...prev, {
             type: 'error',
-            content: `Commande non reconnue: ${cmd}. Tapez "help" pour l'aide.`,
+            content: `Unknown command: ${cmd}. Type "help" for available commands.`,
         }]);
     };
 
@@ -277,9 +347,8 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
             executeCommand(currentInput);
             setCurrentInput('');
         }
-        // Ctrl+C to cancel/stop shell
         if (e.key === 'c' && e.ctrlKey && shellActive) {
-            window.electronAPI.shell.write(shellId, '\x03'); // Send SIGINT
+            window.electronAPI.shell.write(shellId, '\x03');
         }
     };
 
@@ -293,13 +362,13 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
                         className={`terminal-tab ${activeTab === 'terminal' ? 'active' : ''}`}
                         onClick={() => setActiveTab('terminal')}
                     >
-                        <span>🐳 Terminal</span>
+                        <span>Terminal</span>
                     </div>
                     <div
                         className={`terminal-tab ${activeTab === 'shell' ? 'active' : ''}`}
                         onClick={() => setActiveTab('shell')}
                     >
-                        <span>🐚 Shell {shellActive && '●'}</span>
+                        <span>Shell {shellActive && <span className="shell-active-dot"></span>}</span>
                     </div>
                 </div>
                 <div className="terminal-actions">
@@ -307,39 +376,42 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
                         <>
                             <button
                                 className="icon-btn"
-                                title="Nouveau shell"
+                                title="New shell"
                                 onClick={() => setShowShellPicker(true)}
                             >
-                                ➕
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                             </button>
                             {shellActive && (
                                 <button
                                     className="icon-btn"
-                                    title="Fermer le shell"
+                                    title="Stop shell"
                                     onClick={stopShell}
                                 >
-                                    ⏹️
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="1"/></svg>
                                 </button>
                             )}
                         </>
                     )}
                     <button
                         className="icon-btn"
-                        title="Effacer"
-                        onClick={() => setLines([{ type: 'system', content: '🐳 Terminal effacé' }])}
+                        title="Clear"
+                        onClick={() => setLines([{ type: 'system', content: 'Terminal cleared' }])}
                     >
-                        🗑️
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
                     </button>
-                    <button className="icon-btn" title="Fermer" onClick={onClose}>×</button>
+                    <button className="icon-btn" title="Close" onClick={onClose}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
                 </div>
             </div>
 
-            {/* Shell picker dropdown */}
             {showShellPicker && (
                 <div className="shell-picker">
                     <div className="shell-picker-header">
-                        <span>Choisir un shell Docker</span>
-                        <button className="icon-btn" onClick={() => setShowShellPicker(false)}>×</button>
+                        <span>Select a Docker shell</span>
+                        <button className="icon-btn" onClick={() => setShowShellPicker(false)}>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        </button>
                     </div>
                     <div className="shell-picker-options">
                         {SHELL_OPTIONS.map(option => (
@@ -348,8 +420,8 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
                                 className="shell-option"
                                 onClick={() => startShell(option)}
                             >
-                                <span className="shell-option-icon">{option.icon}</span>
                                 <span className="shell-option-name">{option.name}</span>
+                                <span className="shell-option-image">{option.image}</span>
                             </button>
                         ))}
                     </div>
@@ -373,9 +445,9 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
                         onKeyDown={handleKeyDown}
                         disabled={isRunning}
                         placeholder={
-                            isRunning ? 'Exécution en cours...' : 
-                            shellActive && activeTab === 'shell' ? 'Entrez une commande shell...' :
-                            'Tapez une commande...'
+                            isRunning ? 'Running...' :
+                            shellActive && activeTab === 'shell' ? 'Enter a shell command...' :
+                            'Type a command...'
                         }
                     />
                 </div>

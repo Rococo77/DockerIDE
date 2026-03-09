@@ -22,37 +22,59 @@ const FileIcon: React.FC<{ name: string; type: 'file' | 'directory'; expanded?: 
     expanded,
 }) => {
     if (type === 'directory') {
-        return <span className="file-icon">{expanded ? '📂' : '📁'}</span>;
+        return (
+            <span className="file-icon file-icon-svg">
+                {expanded ? (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#dcb67a" strokeWidth="1.5"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/><line x1="3" y1="12" x2="21" y2="12" strokeOpacity="0.3"/></svg>
+                ) : (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#dcb67a" strokeWidth="1.5"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+                )}
+            </span>
+        );
     }
 
-    // Icônes par extension
     const ext = name.split('.').pop()?.toLowerCase();
-    const icons: Record<string, string> = {
-        py: '🐍',
-        js: '📜',
-        ts: '📘',
-        jsx: '⚛️',
-        tsx: '⚛️',
-        json: '📋',
-        md: '📝',
-        txt: '📄',
-        dockerfile: '🐳',
-        yml: '⚙️',
-        yaml: '⚙️',
-        html: '🌐',
-        css: '🎨',
-        java: '☕',
-        go: '🐹',
-        rs: '🦀',
-        rb: '💎',
-        php: '🐘',
-        c: '⚡',
-        cpp: '⚡',
-        h: '⚡',
+    const colorMap: Record<string, string> = {
+        py: '#3572A5',
+        js: '#f1e05a',
+        ts: '#3178c6',
+        jsx: '#61dafb',
+        tsx: '#3178c6',
+        json: '#a8b1c2',
+        md: '#519aba',
+        txt: '#a8b1c2',
+        yml: '#cb171e',
+        yaml: '#cb171e',
+        html: '#e44d26',
+        css: '#563d7c',
+        java: '#b07219',
+        go: '#00ADD8',
+        rs: '#dea584',
+        rb: '#CC342D',
+        php: '#4F5D95',
+        c: '#555555',
+        cpp: '#f34b7d',
+        h: '#555555',
     };
 
-    if (name.toLowerCase() === 'dockerfile') return <span className="file-icon">🐳</span>;
-    return <span className="file-icon">{icons[ext || ''] || '📄'}</span>;
+    const labelMap: Record<string, string> = {
+        py: 'PY', js: 'JS', ts: 'TS', jsx: 'JX', tsx: 'TX',
+        json: '{}', md: 'MD', txt: 'TX', yml: 'YM', yaml: 'YM',
+        html: '<>', css: '#', java: 'JV', go: 'GO', rs: 'RS',
+        rb: 'RB', php: 'HP', c: 'C', cpp: 'C+', h: 'H',
+    };
+
+    const isDockerfile = name.toLowerCase() === 'dockerfile' || name.toLowerCase().startsWith('dockerfile.');
+    const isCompose = name === 'docker-compose.yml' || name === 'docker-compose.yaml' || name === 'compose.yml' || name === 'compose.yaml';
+
+    if (isDockerfile || isCompose) {
+        return <span className="file-icon file-icon-label" style={{ color: '#0db7ed' }}>DK</span>;
+    }
+
+    const color = colorMap[ext || ''] || '#a8b1c2';
+    const label = labelMap[ext || ''] || '--';
+
+    return <span className="file-icon file-icon-label" style={{ color }}>{label}</span>;
 };
 
 interface TreeNodeProps {
@@ -215,10 +237,10 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                 <div className="no-project">
                     <p>Aucun projet ouvert</p>
                     <button className="btn btn-primary" onClick={onNewProject}>
-                        ➕ Nouveau projet
+                        + Nouveau projet
                     </button>
                     <button className="btn btn-secondary" onClick={handleOpenFolder}>
-                        📂 Ouvrir un dossier
+                        Ouvrir un dossier
                     </button>
                 </div>
             </div>
@@ -235,22 +257,22 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                         className="icon-btn"
                         onClick={onNewProject}
                     >
-                        ➕
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                     </button>
                     <button
                         title="Ouvrir un dossier"
                         className="icon-btn"
                         onClick={handleOpenFolder}
                     >
-                        📂
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
                     </button>
                     <button
-                        title="Rafraîchir"
+                        title="Rafraichir"
                         className="icon-btn"
                         onClick={handleRefresh}
                         disabled={loading}
                     >
-                        🔄
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
                     </button>
                 </div>
             </div>

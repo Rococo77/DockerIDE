@@ -1,6 +1,7 @@
 import Docker from 'dockerode';
 import { EventEmitter } from 'events';
 import * as stream from 'stream';
+import * as path from 'path';
 
 interface ShellConfig {
     image: string;
@@ -27,9 +28,10 @@ export class InteractiveShell extends EventEmitter {
     private docker: Docker;
     private container: Docker.Container | null = null;
     private execInstance: Docker.Exec | null = null;
-    private outputStream: stream.Duplex | null = null;
+    private outputStream: NodeJS.ReadWriteStream | null = null;
     private isRunning = false;
     private containerId: string | null = null;
+    private containerName: string | null = null;
 
     constructor() {
         super();
@@ -50,7 +52,7 @@ export class InteractiveShell extends EventEmitter {
             // Emit status
             this.emit('message', { 
                 type: 'system', 
-                data: `🐳 Démarrage du shell interactif (${imageName})...` 
+                data: `Starting interactive shell (${imageName})...` 
             } as ShellMessage);
 
             // Check if image exists
@@ -59,7 +61,7 @@ export class InteractiveShell extends EventEmitter {
             } catch {
                 this.emit('message', { 
                     type: 'system', 
-                    data: `📥 Téléchargement de l'image ${imageName}...` 
+                    data: `Downloading image ${imageName}...` 
                 } as ShellMessage);
 
                 // Pull image
@@ -74,8 +76,11 @@ export class InteractiveShell extends EventEmitter {
                 });
             }
 
-            // Create container
-            const containerName = `docker-ide-shell-${Date.now()}`;
+            // Create container - name based on project folder
+            const projectName = config.workspacePath 
+                ? path.basename(config.workspacePath).toLowerCase().replace(/[^a-z0-9-]/g, '-')
+                : 'shell';
+            const containerName = `docker-ide-${projectName}-${Date.now()}`;
             const hostConfig: Docker.HostConfig = {
                 AutoRemove: true,
             };
@@ -97,6 +102,7 @@ export class InteractiveShell extends EventEmitter {
             });
 
             this.containerId = this.container.id;
+            this.containerName = containerName;
 
             // Start container
             await this.container.start();
@@ -108,20 +114,33 @@ export class InteractiveShell extends EventEmitter {
                 stdin: true,
                 stdout: true,
                 stderr: true,
+                hijack: true,
             });
 
-            // Handle output
+            // Handle output - for TTY mode, data comes as raw text
             this.outputStream.on('data', (chunk: Buffer) => {
                 const text = chunk.toString('utf8');
-                // Remove control characters that are not printable
-                const cleanText = text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
-                if (cleanText.trim()) {
+                // Clean up control sequences but keep readable output
+                const cleanText = text
+                    .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '') // Remove ANSI escape codes
+                    .replace(/\x1b\][^\x07]*\x07/g, '') // Remove OSC sequences
+                    .replace(/\x1b[PX^_][^\x1b]*\x1b\\/g, '') // Remove other escape sequences
+                    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // Remove control chars except newline/tab
+                    .trim();
+                
+                // Skip empty lines and debug/config output
+                if (cleanText.length > 0 && 
+                    !cleanText.includes('"stream"') && 
+                    !cleanText.includes('"stdin"') &&
+                    !cleanText.includes('"stdout"') &&
+                    !cleanText.includes('"stderr"') &&
+                    !cleanText.includes('"hijack"')) {
                     this.emit('message', { type: 'output', data: cleanText } as ShellMessage);
                 }
             });
 
             this.outputStream.on('end', () => {
-                this.emit('message', { type: 'system', data: '🔌 Shell fermé' } as ShellMessage);
+                this.emit('message', { type: 'system', data: 'Shell closed' } as ShellMessage);
                 this.emit('close');
                 this.isRunning = false;
             });
@@ -140,7 +159,7 @@ export class InteractiveShell extends EventEmitter {
 
             this.emit('message', { 
                 type: 'system', 
-                data: '✓ Shell prêt. Tapez vos commandes.' 
+                data: 'Shell ready. Type your commands.' 
             } as ShellMessage);
 
             return true;
@@ -222,6 +241,13 @@ export class InteractiveShell extends EventEmitter {
      */
     getContainerId(): string | null {
         return this.containerId;
+    }
+
+    /**
+     * Get container name
+     */
+    getContainerName(): string | null {
+        return this.containerName;
     }
 }
 
