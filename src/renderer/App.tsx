@@ -6,6 +6,7 @@ import Editor from './components/ide/Editor';
 import Terminal, { TerminalHandle } from './components/ide/Terminal';
 import DockerStatusBar from './components/ide/DockerStatusBar';
 import ProjectCreatorModal from './components/ide/ProjectCreatorModal';
+import DockerPanel from './components/ide/DockerPanel';
 import TitleBar from './components/ide/TitleBar';
 
 type SidebarTab = 'files' | 'extensions' | 'docker';
@@ -216,18 +217,7 @@ const App: React.FC = () => {
             case 'extensions':
                 return <ExtensionsPanel />;
             case 'docker':
-                return (
-                    <div className="docker-panel">
-                        <h3>Docker</h3>
-                        <p className="text-muted">Container management</p>
-                        <div className="docker-section">
-                            <h4>Conteneurs actifs</h4>
-                            <div className="empty-state">
-                                <p>Aucun conteneur actif</p>
-                            </div>
-                        </div>
-                    </div>
-                );
+                return <DockerPanel workspacePath={workspacePath} />;
             default:
                 return null;
         }
@@ -260,6 +250,12 @@ const App: React.FC = () => {
                                 key={file.path}
                                 className={`editor-tab ${index === activeFileIndex ? 'active' : ''}`}
                                 onClick={() => setActiveFileIndex(index)}
+                                onMouseDown={(e) => {
+                                    if (e.button === 1) {
+                                        e.preventDefault();
+                                        handleCloseFile(index);
+                                    }
+                                }}
                             >
                                 <span className="tab-name">
                                     {file.isModified && '● '}

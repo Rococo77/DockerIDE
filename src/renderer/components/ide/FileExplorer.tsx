@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 
 interface FileNode {
     name: string;
@@ -14,6 +14,21 @@ interface FileExplorerProps {
     workspacePath?: string;
     onWorkspaceChange?: (path: string) => void;
     onNewProject?: () => void;
+}
+
+interface ContextMenuState {
+    visible: boolean;
+    x: number;
+    y: number;
+    node: FileNode | null;
+}
+
+interface InlineInputState {
+    visible: boolean;
+    parentPath: string;
+    type: 'file' | 'folder' | 'rename';
+    currentName?: string;
+    currentPath?: string;
 }
 
 const FileIcon: React.FC<{ name: string; type: 'file' | 'directory'; expanded?: boolean }> = ({
@@ -84,6 +99,7 @@ interface TreeNodeProps {
     selectedFile?: string;
     expandedPaths: Set<string>;
     onToggle: (path: string) => void;
+    onContextMenu: (e: React.MouseEvent, node: FileNode) => void;
 }
 
 const FileTreeNode: React.FC<TreeNodeProps> = ({
@@ -93,6 +109,7 @@ const FileTreeNode: React.FC<TreeNodeProps> = ({
     selectedFile,
     expandedPaths,
     onToggle,
+    onContextMenu,
 }) => {
     const isSelected = selectedFile === node.path;
     const isExpanded = expandedPaths.has(node.path);
@@ -105,12 +122,19 @@ const FileTreeNode: React.FC<TreeNodeProps> = ({
         }
     };
 
+    const handleContextMenu = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onContextMenu(e, node);
+    };
+
     return (
         <div>
             <div
                 className={`file-tree-item ${isSelected ? 'selected' : ''}`}
                 style={{ paddingLeft: depth * 16 + 8 }}
                 onClick={handleClick}
+                onContextMenu={handleContextMenu}
             >
                 <FileIcon name={node.name} type={node.type} expanded={isExpanded} />
                 <span className="file-name">{node.name}</span>
@@ -126,6 +150,7 @@ const FileTreeNode: React.FC<TreeNodeProps> = ({
                             selectedFile={selectedFile}
                             expandedPaths={expandedPaths}
                             onToggle={onToggle}
+                            onContextMenu={onContextMenu}
                         />
                     ))}
                 </div>
@@ -145,6 +170,9 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [contextMenu, setContextMenu] = useState<ContextMenuState>({ visible: false, x: 0, y: 0, node: null });
+    const [inlineInput, setInlineInput] = useState<InlineInputState>({ visible: false, parentPath: '', type: 'file' });
+    const inlineInputRef = useRef<HTMLInputElement>(null);
 
     // Load directory contents
     const loadDirectory = useCallback(async (dirPath: string): Promise<FileNode | null> => {
@@ -229,6 +257,124 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
         }
     };
 
+    // Context menu handler
+    const handleContextMenu = useCallback((e: React.MouseEvent, node: FileNode) => {
+        setContextMenu({ visible: true, x: e.clientX, y: e.clientY, node });
+    }, []);
+
+    const closeContextMenu = useCallback(() => {
+        setContextMenu({ visible: false, x: 0, y: 0, node: null });
+    }, []);
+
+    // Close context menu on click outside
+    useEffect(() => {
+        const handler = () => closeContextMenu();
+        if (contextMenu.visible) {
+            document.addEventListener('click', handler);
+            return () => document.removeEventListener('click', handler);
+        }
+    }, [contextMenu.visible, closeContextMenu]);
+
+    // Focus inline input when it appears
+    useEffect(() => {
+        if (inlineInput.visible && inlineInputRef.current) {
+            inlineInputRef.current.focus();
+            if (inlineInput.type === 'rename' && inlineInput.currentName) {
+                const dotIndex = inlineInput.currentName.lastIndexOf('.');
+                if (dotIndex > 0) {
+                    inlineInputRef.current.setSelectionRange(0, dotIndex);
+                } else {
+                    inlineInputRef.current.select();
+                }
+            }
+        }
+    }, [inlineInput.visible]);
+
+    const handleNewFile = (parentPath: string) => {
+        closeContextMenu();
+        setExpandedPaths(prev => new Set([...prev, parentPath]));
+        setInlineInput({ visible: true, parentPath, type: 'file' });
+    };
+
+    const handleNewFolder = (parentPath: string) => {
+        closeContextMenu();
+        setExpandedPaths(prev => new Set([...prev, parentPath]));
+        setInlineInput({ visible: true, parentPath, type: 'folder' });
+    };
+
+    const handleRenameStart = (node: FileNode) => {
+        closeContextMenu();
+        const parentPath = node.path.substring(0, node.path.lastIndexOf(node.name.length > 0 ? '/' : ''));
+        setInlineInput({
+            visible: true,
+            parentPath: node.path.replace(/[/\\][^/\\]+$/, ''),
+            type: 'rename',
+            currentName: node.name,
+            currentPath: node.path,
+        });
+    };
+
+    const handleDelete = async (node: FileNode) => {
+        closeContextMenu();
+        const confirmMsg = node.type === 'directory'
+            ? `Delete folder "${node.name}" and all its contents?`
+            : `Delete file "${node.name}"?`;
+        if (!confirm(confirmMsg)) return;
+
+        try {
+            const result = await window.electronAPI.fs.delete(node.path);
+            if (result.success) {
+                await handleRefresh();
+            } else {
+                setError(result.error || 'Delete failed');
+            }
+        } catch (err: any) {
+            setError(err.message);
+        }
+    };
+
+    const handleInlineInputSubmit = async (value: string) => {
+        if (!value.trim()) {
+            setInlineInput({ visible: false, parentPath: '', type: 'file' });
+            return;
+        }
+
+        try {
+            if (inlineInput.type === 'file') {
+                const newPath = `${inlineInput.parentPath}/${value}`;
+                const result = await window.electronAPI.fs.createFile(newPath, '');
+                if (result.success) {
+                    await handleRefresh();
+                    handleFileSelect(newPath);
+                }
+            } else if (inlineInput.type === 'folder') {
+                const newPath = `${inlineInput.parentPath}/${value}`;
+                const result = await window.electronAPI.fs.createDirectory(newPath);
+                if (result.success) {
+                    await handleRefresh();
+                }
+            } else if (inlineInput.type === 'rename' && inlineInput.currentPath) {
+                const newPath = `${inlineInput.parentPath}/${value}`;
+                const result = await window.electronAPI.fs.rename(inlineInput.currentPath, newPath);
+                if (result.success) {
+                    await handleRefresh();
+                }
+            }
+        } catch (err: any) {
+            setError(err.message);
+        }
+
+        setInlineInput({ visible: false, parentPath: '', type: 'file' });
+    };
+
+    const handleInlineInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') {
+            handleInlineInputSubmit(e.currentTarget.value);
+        } else if (e.key === 'Escape') {
+            setInlineInput({ visible: false, parentPath: '', type: 'file' });
+        }
+    };
+
     // No project open state
     if (!workspacePath || !fileTree) {
         return (
@@ -294,7 +440,54 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                         selectedFile={selectedFile}
                         expandedPaths={expandedPaths}
                         onToggle={toggleFolder}
+                        onContextMenu={handleContextMenu}
                     />
+                </div>
+            )}
+
+            {/* Inline input for new file/folder/rename */}
+            {inlineInput.visible && (
+                <div className="inline-input-overlay">
+                    <input
+                        ref={inlineInputRef}
+                        className="inline-input"
+                        type="text"
+                        defaultValue={inlineInput.type === 'rename' ? inlineInput.currentName : ''}
+                        placeholder={inlineInput.type === 'folder' ? 'Folder name...' : 'File name...'}
+                        onKeyDown={handleInlineInputKeyDown}
+                        onBlur={(e) => handleInlineInputSubmit(e.currentTarget.value)}
+                    />
+                </div>
+            )}
+
+            {/* Context menu */}
+            {contextMenu.visible && contextMenu.node && (
+                <div
+                    className="context-menu"
+                    style={{ top: contextMenu.y, left: contextMenu.x }}
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    {contextMenu.node.type === 'directory' && (
+                        <>
+                            <button className="context-menu-item" onClick={() => handleNewFile(contextMenu.node!.path)}>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+                                New File
+                            </button>
+                            <button className="context-menu-item" onClick={() => handleNewFolder(contextMenu.node!.path)}>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+                                New Folder
+                            </button>
+                            <div className="context-menu-separator" />
+                        </>
+                    )}
+                    <button className="context-menu-item" onClick={() => handleRenameStart(contextMenu.node!)}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                        Rename
+                    </button>
+                    <button className="context-menu-item danger" onClick={() => handleDelete(contextMenu.node!)}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                        Delete
+                    </button>
                 </div>
             )}
         </div>

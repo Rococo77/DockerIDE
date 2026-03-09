@@ -346,6 +346,66 @@ body {
     text-overflow: ellipsis;
 }
 
+/* Context Menu */
+.context-menu {
+    position: fixed;
+    z-index: 1000;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 4px 0;
+    min-width: 160px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.context-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 6px 12px;
+    background: none;
+    border: none;
+    color: var(--text-primary);
+    font-size: 12px;
+    cursor: pointer;
+    text-align: left;
+}
+
+.context-menu-item:hover {
+    background: var(--bg-hover);
+}
+
+.context-menu-item.danger {
+    color: var(--error);
+}
+
+.context-menu-item.danger:hover {
+    background: rgba(244, 67, 54, 0.15);
+}
+
+.context-menu-separator {
+    height: 1px;
+    background: var(--border-color);
+    margin: 4px 0;
+}
+
+/* Inline input for new file/folder/rename */
+.inline-input-overlay {
+    padding: 4px 8px;
+}
+
+.inline-input {
+    width: 100%;
+    padding: 4px 8px;
+    background: var(--bg-primary);
+    border: 1px solid var(--accent-blue);
+    border-radius: 2px;
+    color: var(--text-primary);
+    font-size: 12px;
+    outline: none;
+}
+
 /* ============================================
    Extensions Panel
    ============================================ */
@@ -1028,6 +1088,82 @@ kbd {
     font-size: 12px;
     color: var(--text-secondary);
     margin-bottom: 8px;
+}
+
+.docker-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+.docker-section-header h4 {
+    margin-bottom: 0;
+}
+
+.docker-section-actions {
+    display: flex;
+    gap: 4px;
+}
+
+.docker-error {
+    color: var(--error);
+    font-size: 11px;
+    padding: 4px 8px;
+    background: rgba(244, 67, 54, 0.1);
+    border-radius: 3px;
+    margin-bottom: 8px;
+}
+
+.compose-services,
+.container-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.compose-service,
+.container-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 8px;
+    border-radius: 3px;
+    font-size: 12px;
+}
+
+.compose-service:hover,
+.container-item:hover {
+    background: var(--bg-hover);
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--text-muted);
+}
+
+.status-dot.running {
+    background: var(--success);
+}
+
+.status-dot.stopped {
+    background: var(--error);
+}
+
+.service-name,
+.container-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.service-status {
+    color: var(--text-secondary);
+    font-size: 11px;
 }
 
 /* ============================================
