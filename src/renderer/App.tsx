@@ -7,6 +7,8 @@ import Terminal, { TerminalHandle } from './components/ide/Terminal';
 import DockerStatusBar from './components/ide/DockerStatusBar';
 import ProjectCreatorModal from './components/ide/ProjectCreatorModal';
 import TitleBar from './components/ide/TitleBar';
+import DockerPanel from './components/ide/DockerPanel';
+import { useToast } from './components/ide/ToastContainer';
 
 type SidebarTab = 'files' | 'extensions' | 'docker';
 
@@ -18,6 +20,7 @@ interface OpenFile {
 }
 
 const App: React.FC = () => {
+    const { addToast } = useToast();
     const [activeTab, setActiveTab] = useState<SidebarTab>('files');
     const [workspacePath, setWorkspacePath] = useState<string | undefined>();
     const [openFiles, setOpenFiles] = useState<OpenFile[]>([]);
@@ -71,7 +74,7 @@ const App: React.FC = () => {
                 setActiveFileIndex(openFiles.length);
             }
         } catch (err) {
-            console.error('Error loading file:', err);
+            addToast('Erreur lors du chargement du fichier', 'error');
         }
     };
 
@@ -108,9 +111,10 @@ const App: React.FC = () => {
                     };
                     return updated;
                 });
+                addToast('Fichier sauvegardé', 'success');
             }
         } catch (err) {
-            console.error('Error saving file:', err);
+            addToast('Erreur lors de la sauvegarde', 'error');
         }
     };
 
@@ -152,7 +156,7 @@ const App: React.FC = () => {
                 setActiveTab('files');
             }
         } catch (err) {
-            console.error('Error opening folder:', err);
+            addToast('Erreur lors de l\'ouverture du dossier', 'error');
         }
     };
 
@@ -216,18 +220,7 @@ const App: React.FC = () => {
             case 'extensions':
                 return <ExtensionsPanel />;
             case 'docker':
-                return (
-                    <div className="docker-panel">
-                        <h3>Docker</h3>
-                        <p className="text-muted">Container management</p>
-                        <div className="docker-section">
-                            <h4>Conteneurs actifs</h4>
-                            <div className="empty-state">
-                                <p>Aucun conteneur actif</p>
-                            </div>
-                        </div>
-                    </div>
-                );
+                return <DockerPanel workspacePath={workspacePath} />;
             default:
                 return null;
         }
