@@ -1017,17 +1017,232 @@ kbd {
    ============================================ */
 
 .docker-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.docker-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px 8px;
+}
+
+.docker-panel-header h3 {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+    padding: 0;
+}
+
+.docker-error {
+    padding: 8px 12px;
+    margin: 0 12px;
+    background: rgba(244, 67, 54, 0.1);
+    border: 1px solid rgba(244, 67, 54, 0.3);
+    border-radius: 4px;
+    color: var(--error);
+    font-size: 11px;
+}
+
+.docker-summary {
+    display: flex;
+    gap: 12px;
+    padding: 4px 16px 8px;
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+.docker-stat {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.docker-stat-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.docker-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border-color);
+    padding: 0 8px;
+}
+
+.docker-tab {
+    flex: 1;
+    padding: 6px 8px;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 11px;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+}
+
+.docker-tab:hover {
+    color: var(--text-primary);
+}
+
+.docker-tab.active {
+    color: var(--text-primary);
+    border-bottom-color: var(--accent-blue);
+}
+
+.docker-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 0;
+}
+
+.docker-item {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border-color);
+    transition: background 0.1s;
+}
+
+.docker-item:hover {
+    background: var(--bg-hover);
+}
+
+.docker-item-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 2px;
+}
+
+.docker-item-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.docker-item-name {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+}
+
+.docker-item-meta {
+    display: flex;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+}
+
+.docker-item-image {
+    color: var(--accent-green);
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 10px;
+}
+
+.docker-item-status {
+    color: var(--text-secondary);
+}
+
+.docker-item-size {
+    color: var(--text-secondary);
+}
+
+.docker-item-ports {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    margin-bottom: 4px;
+}
+
+.port-badge {
+    background: var(--bg-tertiary);
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    color: var(--accent-blue);
+}
+
+.docker-item-actions {
+    display: flex;
+    gap: 4px;
+    justify-content: flex-end;
+}
+
+.docker-action-btn {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 10px;
+    transition: all 0.15s;
+}
+
+.docker-action-btn:hover {
+    color: var(--text-primary);
+}
+
+.docker-action-btn.start:hover {
+    background: rgba(76, 175, 80, 0.2);
+    border-color: #4caf50;
+    color: #4caf50;
+}
+
+.docker-action-btn.stop:hover {
+    background: rgba(255, 152, 0, 0.2);
+    border-color: #ff9800;
+    color: #ff9800;
+}
+
+.docker-action-btn.remove:hover {
+    background: rgba(244, 67, 54, 0.2);
+    border-color: #f44336;
+    color: #f44336;
+}
+
+.action-loading {
+    font-size: 11px;
+    color: var(--text-muted);
+    animation: pulse 1s infinite;
+}
+
+/* Compose section */
+.docker-compose-section {
     padding: 12px;
 }
 
-.docker-section {
-    margin-top: 16px;
+.compose-actions {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 12px;
 }
 
-.docker-section h4 {
-    font-size: 12px;
-    color: var(--text-secondary);
-    margin-bottom: 8px;
+.compose-output {
+    background: #0d1117;
+    border-radius: 6px;
+    padding: 10px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 11px;
+    color: #c9d1d9;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 300px;
+    overflow-y: auto;
 }
 
 /* ============================================
@@ -1772,3 +1987,75 @@ kbd {
     font-size: 13px;
     color: var(--text-primary);
 }
+
+/* ===== Toast Notifications ===== */
+.toast-container {
+    position: fixed;
+    bottom: 32px;
+    right: 16px;
+    z-index: 10000;
+    display: flex;
+    flex-direction: column-reverse;
+    gap: 8px;
+    pointer-events: none;
+}
+
+.toast {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-radius: 6px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    font-size: 13px;
+    min-width: 280px;
+    max-width: 420px;
+    pointer-events: auto;
+    animation: toast-slide-in 0.25s ease-out;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+@keyframes toast-slide-in {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+.toast-icon {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+}
+
+.toast-message {
+    flex: 1;
+    line-height: 1.4;
+}
+
+.toast-close {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 16px;
+    cursor: pointer;
+    padding: 0 2px;
+    line-height: 1;
+}
+
+.toast-close:hover {
+    color: var(--text-primary);
+}
+
+.toast-success { border-left: 3px solid #4caf50; }
+.toast-success .toast-icon { color: #4caf50; }
+
+.toast-error { border-left: 3px solid #f44336; }
+.toast-error .toast-icon { color: #f44336; }
+
+.toast-warning { border-left: 3px solid #ff9800; }
+.toast-warning .toast-icon { color: #ff9800; }
+
+.toast-info { border-left: 3px solid #0078d4; }
+.toast-info .toast-icon { color: #0078d4; }
