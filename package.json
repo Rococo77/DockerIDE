@@ -1,15 +1,19 @@
 {
-  "name": "front",
-  "productName": "front",
+  "name": "dockeride",
+  "productName": "DockerIDE",
   "version": "1.0.0",
-  "description": "My Electron application description",
+  "description": "IDE pédagogique Docker pour étudiants en informatique",
   "main": ".vite/build/main.js",
   "scripts": {
     "start": "electron-forge start",
     "package": "electron-forge package",
     "make": "electron-forge make",
     "publish": "electron-forge publish",
-    "lint": "eslint --ext .ts,.tsx ."
+    "lint": "eslint --ext .ts,.tsx .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "keywords": [],
   "author": {
@@ -39,12 +43,16 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "typescript": "^5.9.3",
-    "vite": "^7.2.4"
+    "vite": "^7.2.4",
+    "vitest": "^2.0.0",
+    "@vitest/coverage-v8": "^2.0.0"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
     "dockerode": "^4.0.9",
-    "electron-squirrel-startup": "^1.0.1"
+    "electron-log": "^5.2.0",
+    "electron-squirrel-startup": "^1.0.1",
+    "update-electron-app": "^3.0.0"
   },
   "overrides": {
     "dompurify": "^3.3.2",

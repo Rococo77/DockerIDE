@@ -2,9 +2,10 @@ import { ipcMain } from 'electron';
 import { DockerManager } from '../docker/DockerManager';
 import { ContainerManager } from '../docker/ContainerManager';
 import { ImageManager } from '../docker/ImageManager';
+import log from '../logger';
 
 export function registerDockerHandlers() {
-    console.log('[main] registerDockerHandlers() called');
+    log.info('[main] registerDockerHandlers() called');
     const dockerManager = DockerManager.getInstance();
     const containerManager = ContainerManager.getInstance();
     const imageManager = ImageManager.getInstance();
@@ -16,11 +17,11 @@ export function registerDockerHandlers() {
         try {
             const info = await dockerManager.checkConnection();
             if (!info.isConnected) {
-                console.warn('[docker:check-connection] Docker not connected:', info.error);
+                log.warn('[docker:check-connection] Docker not connected:', info.error);
             }
             return { success: true, data: info };
         } catch (error: any) {
-            console.error('[docker:check-connection] handler error:', error);
+            log.error('[docker:check-connection] handler error:', error);
             return { success: false, error: error?.message ?? String(error) };
         }
     });
@@ -44,7 +45,7 @@ export function registerDockerHandlers() {
             const dockerInfo = await dockerManager.checkConnection();
             return { success: true, data: { env, socketPath, dockerInfo } };
         } catch (err: any) {
-            console.error('[docker:diagnostics] handler error:', err);
+            log.error('[docker:diagnostics] handler error:', err);
             return { success: false, error: err?.message ?? String(err) };
         }
     });
@@ -55,7 +56,7 @@ export function registerDockerHandlers() {
             const list = await containerManager.listContainers(all);
             return { success: true, data: list };
         } catch (error: any) {
-            console.error('[container:list] handler error:', error);
+            log.error('[container:list] handler error:', error);
             return { success: false, error: error?.message ?? String(error) };
         }
     });
@@ -129,7 +130,7 @@ export function registerDockerHandlers() {
             const images = await imageManager.listImages();
             return { success: true, data: images };
         } catch (error: any) {
-            console.error('[image:list] handler error:', error);
+            log.error('[image:list] handler error:', error);
             return { success: false, error: error?.message ?? String(error) };
         }
     });

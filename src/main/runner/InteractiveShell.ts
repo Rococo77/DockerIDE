@@ -2,6 +2,7 @@ import Docker from 'dockerode';
 import { EventEmitter } from 'events';
 import * as stream from 'stream';
 import * as path from 'path';
+import log from '../logger';
 
 interface ShellConfig {
     image: string;
@@ -121,10 +122,15 @@ export class InteractiveShell extends EventEmitter {
             this.outputStream.on('data', (chunk: Buffer) => {
                 const text = chunk.toString('utf8');
                 // Clean up control sequences but keep readable output
+                // eslint-disable-next-line no-control-regex
                 const cleanText = text
+                    // eslint-disable-next-line no-control-regex
                     .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '') // Remove ANSI escape codes
+                    // eslint-disable-next-line no-control-regex
                     .replace(/\x1b\][^\x07]*\x07/g, '') // Remove OSC sequences
+                    // eslint-disable-next-line no-control-regex
                     .replace(/\x1b[PX^_][^\x1b]*\x1b\\/g, '') // Remove other escape sequences
+                    // eslint-disable-next-line no-control-regex
                     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // Remove control chars except newline/tab
                     .trim();
                 
@@ -196,7 +202,7 @@ export class InteractiveShell extends EventEmitter {
             try {
                 await this.container.resize({ w: cols, h: rows });
             } catch (err) {
-                console.error('Error resizing terminal:', err);
+                log.error('Error resizing terminal:', err);
             }
         }
     }
@@ -256,6 +262,7 @@ export class ShellManager {
     private static instance: ShellManager;
     private shells: Map<string, InteractiveShell> = new Map();
 
+    // eslint-disable-next-line @typescript-eslint/no-empty-function
     private constructor() {}
 
     static getInstance(): ShellManager {

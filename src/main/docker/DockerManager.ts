@@ -1,4 +1,5 @@
 import Docker from 'dockerode';
+import log from '../logger';
 
 export interface DockerInfo {
     isConnected: boolean;
@@ -54,7 +55,7 @@ export class DockerManager {
                 usedHost: process.env.DOCKER_HOST ?? (process.platform === 'win32' ? '//./pipe/docker_engine' : '/var/run/docker.sock'),
             };
         } catch (error) {
-            console.error('[DockerManager] checkConnection initial error:', error, 'socketPath:', process.platform === 'win32' ? '//./pipe/docker_engine' : '/var/run/docker.sock');
+            log.error('[DockerManager] checkConnection initial error:', error, 'socketPath:', process.platform === 'win32' ? '//./pipe/docker_engine' : '/var/run/docker.sock');
             // If first attempt fails, try to create a fallback docker client
             try {
                 // Second attempt: try explicit socket path (useful on windows named pipe)
@@ -75,7 +76,7 @@ export class DockerManager {
                     usedHost: process.env.DOCKER_HOST ?? (process.platform === 'win32' ? '//./pipe/docker_engine' : '/var/run/docker.sock'),
                 };
             } catch (err2) {
-                console.error('[DockerManager] fallback connection error:', err2);
+                log.error('[DockerManager] fallback connection error:', err2);
                 return {
                     isConnected: false,
                     error: this.getErrorMessage(error),

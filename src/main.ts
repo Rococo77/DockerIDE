@@ -1,16 +1,25 @@
 import { app, BrowserWindow } from 'electron';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
+import { updateElectronApp } from 'update-electron-app';
 import { registerDockerHandlers } from './main/ipc/dockerHandlers';
 import { registerFileSystemHandlers } from './main/ipc/fileSystemHandlers';
 import { registerRunnerHandlers } from './main/ipc/runnerHandlers';
+import log from './main/logger';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
   app.quit();
 }
 
+log.info('DockerIDE starting up', { version: app.getVersion() });
+
 const isDev = process.env.NODE_ENV === 'development' || !!MAIN_WINDOW_VITE_DEV_SERVER_URL;
+
+// Enable auto-updates from GitHub Releases in packaged builds only
+if (app.isPackaged) {
+  updateElectronApp({ logger: log });
+}
 
 let mainWindow: BrowserWindow | null = null;
 

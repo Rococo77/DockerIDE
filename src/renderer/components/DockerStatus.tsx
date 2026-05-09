@@ -9,6 +9,7 @@ interface DockerInfo {
     containerCount?: number;
     imageCount?: number;
     error?: string;
+    usedHost?: string;
 }
 
 export const DockerStatus: React.FC = () => {

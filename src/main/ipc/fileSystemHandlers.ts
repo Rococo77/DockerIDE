@@ -1,10 +1,11 @@
 import { ipcMain, dialog, BrowserWindow } from 'electron';
 import { FileSystemManager } from '../fs/FileSystemManager';
+import log from '../logger';
 
 export function registerFileSystemHandlers(): void {
     const fsManager = FileSystemManager.getInstance();
 
-    console.log('[FileSystem] Registering file system IPC handlers...');
+    log.info('[FileSystem] Registering file system IPC handlers...');
 
     // Open folder dialog
     ipcMain.handle('fs:open-folder', async () => {
@@ -129,5 +130,5 @@ export function registerFileSystemHandlers(): void {
         return { image };
     });
 
-    console.log('[FileSystem] File system IPC handlers registered');
+    log.info('[FileSystem] File system IPC handlers registered');
 }

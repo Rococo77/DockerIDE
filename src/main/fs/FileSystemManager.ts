@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import log from '../logger';
 
 export interface FileNode {
     name: string;
@@ -19,6 +20,7 @@ export class FileSystemManager {
     private static instance: FileSystemManager;
     private currentWorkspace: string | null = null;
 
+    // eslint-disable-next-line @typescript-eslint/no-empty-function
     private constructor() {}
 
     static getInstance(): FileSystemManager {
@@ -46,14 +48,25 @@ export class FileSystemManager {
         return this.currentWorkspace;
     }
 
+    private assertInWorkspace(inputPath: string): string {
+        if (!this.currentWorkspace) throw new Error('No workspace set');
+        const resolved = path.resolve(inputPath);
+        const workspace = path.resolve(this.currentWorkspace);
+        if (resolved !== workspace && !resolved.startsWith(workspace + path.sep)) {
+            throw new Error('Access denied: path outside workspace');
+        }
+        return resolved;
+    }
+
     /**
      * Read directory contents and return tree structure
      */
-    async readDirectory(dirPath: string, depth: number = 3): Promise<FileNode[]> {
+    async readDirectory(dirPath: string, depth = 3): Promise<FileNode[]> {
+        const safePath = this.assertInWorkspace(dirPath);
         const result: FileNode[] = [];
-        
+
         try {
-            const entries = await fs.promises.readdir(dirPath, { withFileTypes: true });
+            const entries = await fs.promises.readdir(safePath, { withFileTypes: true });
             
             // Sort: directories first, then files, alphabetically
             entries.sort((a, b) => {
@@ -72,7 +85,7 @@ export class FileSystemManager {
                     continue;
                 }
 
-                const fullPath = path.join(dirPath, entry.name);
+                const fullPath = path.join(safePath, entry.name);
                 const node: FileNode = {
                     name: entry.name,
                     path: fullPath,
@@ -88,7 +101,7 @@ export class FileSystemManager {
                 result.push(node);
             }
         } catch (error) {
-            console.error(`Error reading directory ${dirPath}:`, error);
+            log.error(`Error reading directory ${safePath}:`, error);
             throw error;
         }
 
@@ -99,15 +112,16 @@ export class FileSystemManager {
      * Read file content
      */
     async readFile(filePath: string): Promise<FileContent> {
+        const safePath = this.assertInWorkspace(filePath);
         try {
-            const content = await fs.promises.readFile(filePath, 'utf-8');
+            const content = await fs.promises.readFile(safePath, 'utf-8');
             return {
-                path: filePath,
+                path: safePath,
                 content,
                 encoding: 'utf-8'
             };
         } catch (error) {
-            console.error(`Error reading file ${filePath}:`, error);
+            log.error(`Error reading file ${safePath}:`, error);
             throw error;
         }
     }
@@ -116,14 +130,13 @@ export class FileSystemManager {
      * Write file content
      */
     async writeFile(filePath: string, content: string): Promise<void> {
+        const safePath = this.assertInWorkspace(filePath);
         try {
-            // Ensure directory exists
-            const dir = path.dirname(filePath);
+            const dir = path.dirname(safePath);
             await fs.promises.mkdir(dir, { recursive: true });
-            
-            await fs.promises.writeFile(filePath, content, 'utf-8');
+            await fs.promises.writeFile(safePath, content, 'utf-8');
         } catch (error) {
-            console.error(`Error writing file ${filePath}:`, error);
+            log.error(`Error writing file ${safePath}:`, error);
             throw error;
         }
     }
@@ -131,21 +144,23 @@ export class FileSystemManager {
     /**
      * Create a new file
      */
-    async createFile(filePath: string, content: string = ''): Promise<void> {
-        if (fs.existsSync(filePath)) {
-            throw new Error(`File already exists: ${filePath}`);
+    async createFile(filePath: string, content = ''): Promise<void> {
+        const safePath = this.assertInWorkspace(filePath);
+        if (fs.existsSync(safePath)) {
+            throw new Error(`File already exists: ${safePath}`);
         }
-        await this.writeFile(filePath, content);
+        await this.writeFile(safePath, content);
     }
 
     /**
      * Create a new directory
      */
     async createDirectory(dirPath: string): Promise<void> {
+        const safePath = this.assertInWorkspace(dirPath);
         try {
-            await fs.promises.mkdir(dirPath, { recursive: true });
+            await fs.promises.mkdir(safePath, { recursive: true });
         } catch (error) {
-            console.error(`Error creating directory ${dirPath}:`, error);
+            log.error(`Error creating directory ${safePath}:`, error);
             throw error;
         }
     }
@@ -154,15 +169,16 @@ export class FileSystemManager {
      * Delete a file or directory
      */
     async delete(itemPath: string): Promise<void> {
+        const safePath = this.assertInWorkspace(itemPath);
         try {
-            const stat = await fs.promises.stat(itemPath);
+            const stat = await fs.promises.stat(safePath);
             if (stat.isDirectory()) {
-                await fs.promises.rm(itemPath, { recursive: true });
+                await fs.promises.rm(safePath, { recursive: true });
             } else {
-                await fs.promises.unlink(itemPath);
+                await fs.promises.unlink(safePath);
             }
         } catch (error) {
-            console.error(`Error deleting ${itemPath}:`, error);
+            log.error(`Error deleting ${safePath}:`, error);
             throw error;
         }
     }
@@ -171,10 +187,12 @@ export class FileSystemManager {
      * Rename a file or directory
      */
     async rename(oldPath: string, newPath: string): Promise<void> {
+        const safeOld = this.assertInWorkspace(oldPath);
+        const safeNew = this.assertInWorkspace(newPath);
         try {
-            await fs.promises.rename(oldPath, newPath);
+            await fs.promises.rename(safeOld, safeNew);
         } catch (error) {
-            console.error(`Error renaming ${oldPath} to ${newPath}:`, error);
+            log.error(`Error renaming ${safeOld} to ${safeNew}:`, error);
             throw error;
         }
     }

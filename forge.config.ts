@@ -10,6 +10,9 @@ import { FuseV1Options, FuseVersion } from '@electron/fuses';
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
+    name: 'DockerIDE',
+    executableName: 'dockeride',
+    appBundleId: 'com.dockeride.app',
   },
   rebuildConfig: {},
   makers: [
