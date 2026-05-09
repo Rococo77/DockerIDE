@@ -468,6 +468,7 @@ export class ProjectContainerManager extends EventEmitter {
         for (const [name, info] of this.containers) {
             try {
                 const container = this.docker.getContainer(info.id);
+                // eslint-disable-next-line @typescript-eslint/no-empty-function
                 await container.stop({ t: 1 }).catch(() => {});
                 await container.remove({ force: true });
             } catch {

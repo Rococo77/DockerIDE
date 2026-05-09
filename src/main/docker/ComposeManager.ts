@@ -1,4 +1,4 @@
-import { spawn, ChildProcess } from 'child_process';
+import { spawn, execSync, ChildProcess } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
 import { randomBytes } from 'crypto';
@@ -34,7 +34,7 @@ interface ComposeResult {
 
 export class ComposeManager {
     private static instance: ComposeManager;
-    private composeBinary: string = 'docker';
+    private composeBinary = 'docker';
     private activeProcesses: Map<string, ChildProcess> = new Map();
 
     private constructor() {
@@ -52,7 +52,7 @@ export class ComposeManager {
         // Modern Docker includes compose as a plugin: `docker compose`
         // Fallback to standalone `docker-compose` if needed
         try {
-            const result = require('child_process').execSync('docker compose version', {
+            const result = execSync('docker compose version', {
                 encoding: 'utf-8',
                 timeout: 5000,
             });
@@ -65,7 +65,7 @@ export class ComposeManager {
         }
 
         try {
-            require('child_process').execSync('docker-compose version', {
+            execSync('docker-compose version', {
                 encoding: 'utf-8',
                 timeout: 5000,
             });

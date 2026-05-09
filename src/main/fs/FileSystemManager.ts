@@ -20,6 +20,7 @@ export class FileSystemManager {
     private static instance: FileSystemManager;
     private currentWorkspace: string | null = null;
 
+    // eslint-disable-next-line @typescript-eslint/no-empty-function
     private constructor() {}
 
     static getInstance(): FileSystemManager {
@@ -60,7 +61,7 @@ export class FileSystemManager {
     /**
      * Read directory contents and return tree structure
      */
-    async readDirectory(dirPath: string, depth: number = 3): Promise<FileNode[]> {
+    async readDirectory(dirPath: string, depth = 3): Promise<FileNode[]> {
         const safePath = this.assertInWorkspace(dirPath);
         const result: FileNode[] = [];
 
@@ -143,7 +144,7 @@ export class FileSystemManager {
     /**
      * Create a new file
      */
-    async createFile(filePath: string, content: string = ''): Promise<void> {
+    async createFile(filePath: string, content = ''): Promise<void> {
         const safePath = this.assertInWorkspace(filePath);
         if (fs.existsSync(safePath)) {
             throw new Error(`File already exists: ${safePath}`);
