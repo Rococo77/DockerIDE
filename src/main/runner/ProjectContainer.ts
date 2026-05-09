@@ -1,6 +1,7 @@
 import Docker from 'dockerode';
 import { EventEmitter } from 'events';
 import * as path from 'path';
+import log from '../logger';
 
 interface ProjectContainerConfig {
     projectPath: string;
@@ -86,9 +87,9 @@ export class ProjectContainerManager extends EventEmitter {
                 }
             }
             
-            console.log(`[ProjectContainer] Synced ${this.containers.size} existing containers`);
+            log.info(`[ProjectContainer] Synced ${this.containers.size} existing containers`);
         } catch (error) {
-            console.error('[ProjectContainer] Error syncing containers:', error);
+            log.error('[ProjectContainer] Error syncing containers:', error);
         }
     }
 
@@ -112,13 +113,13 @@ export class ProjectContainerManager extends EventEmitter {
                 
                 // Check if image matches, if not we need to recreate
                 if (inspect.Config.Image !== config.image) {
-                    console.log(`[ProjectContainer] Image changed for ${containerName}, recreating...`);
+                    log.info(`[ProjectContainer] Image changed for ${containerName}, recreating...`);
                     await this.removeContainer(config.projectPath);
                     containerInfo = undefined;
                 }
             } catch (error: any) {
                 // Container doesn't exist anymore
-                console.log(`[ProjectContainer] Container ${containerName} no longer exists, will recreate`);
+                log.info(`[ProjectContainer] Container ${containerName} no longer exists, will recreate`);
                 this.containers.delete(containerName);
                 containerInfo = undefined;
             }
@@ -260,10 +261,10 @@ export class ProjectContainerManager extends EventEmitter {
             
             if (!inspect.State.Running) {
                 await container.start();
-                console.log(`[ProjectContainer] Started container ${containerId}`);
+                log.info(`[ProjectContainer] Started container ${containerId}`);
             }
         } catch (error: any) {
-            console.error(`[ProjectContainer] Error starting container:`, error);
+            log.error(`[ProjectContainer] Error starting container:`, error);
             throw error;
         }
     }
@@ -382,10 +383,10 @@ export class ProjectContainerManager extends EventEmitter {
                 const container = this.docker.getContainer(containerInfo.id);
                 await container.stop({ t: 2 });
                 containerInfo.status = 'stopped';
-                console.log(`[ProjectContainer] Stopped container ${containerName}`);
+                log.info(`[ProjectContainer] Stopped container ${containerName}`);
             } catch (error: any) {
                 if (!error.message?.includes('is not running')) {
-                    console.error(`[ProjectContainer] Error stopping container:`, error);
+                    log.error(`[ProjectContainer] Error stopping container:`, error);
                 }
             }
         }
@@ -413,9 +414,9 @@ export class ProjectContainerManager extends EventEmitter {
                 await container.remove({ force: true });
                 this.containers.delete(containerName);
                 
-                console.log(`[ProjectContainer] Removed container ${containerName}`);
+                log.info(`[ProjectContainer] Removed container ${containerName}`);
             } catch (error: any) {
-                console.error(`[ProjectContainer] Error removing container:`, error);
+                log.error(`[ProjectContainer] Error removing container:`, error);
                 this.containers.delete(containerName);
             }
         }

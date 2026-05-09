@@ -2,6 +2,7 @@ import Docker from 'dockerode';
 import { EventEmitter } from 'events';
 import * as stream from 'stream';
 import * as path from 'path';
+import log from '../logger';
 
 interface ShellConfig {
     image: string;
@@ -196,7 +197,7 @@ export class InteractiveShell extends EventEmitter {
             try {
                 await this.container.resize({ w: cols, h: rows });
             } catch (err) {
-                console.error('Error resizing terminal:', err);
+                log.error('Error resizing terminal:', err);
             }
         }
     }

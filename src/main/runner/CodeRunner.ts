@@ -3,6 +3,7 @@ import { ImageManager } from '../docker/ImageManager';
 import { FileSystemManager } from '../fs/FileSystemManager';
 import { ProjectContainerManager } from './ProjectContainer';
 import * as path from 'path';
+import log from '../logger';
 
 interface ExecutionResult {
     success: boolean;
@@ -238,7 +239,7 @@ export class CodeRunner {
             onProgress?.(`Image ${imageName} ready`);
             return true;
         } catch (error: any) {
-            console.error('Error ensuring image:', error);
+            log.error('Error ensuring image:', error);
             return false;
         }
     }

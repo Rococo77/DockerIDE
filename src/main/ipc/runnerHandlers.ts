@@ -2,12 +2,13 @@ import { ipcMain, BrowserWindow } from 'electron';
 import { CodeRunner } from '../runner/CodeRunner';
 import { ShellManager } from '../runner/InteractiveShell';
 import { ComposeManager } from '../docker/ComposeManager';
+import log from '../logger';
 
 export function registerRunnerHandlers(): void {
     const runner = CodeRunner.getInstance();
     const shellManager = ShellManager.getInstance();
 
-    console.log('[Runner] Registering code runner IPC handlers...');
+    log.info('[Runner] Registering code runner IPC handlers...');
 
     // Run code
     ipcMain.handle('runner:run', async (_event, config: {
@@ -356,5 +357,5 @@ export function registerRunnerHandlers(): void {
         }
     });
 
-    console.log('[Runner] Code runner IPC handlers registered');
+    log.info('[Runner] Code runner IPC handlers registered');
 }

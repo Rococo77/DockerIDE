@@ -1,6 +1,15 @@
 import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
+import { randomBytes } from 'crypto';
+
+const ALLOWED_ENV_KEYS = ['PATH', 'HOME', 'USER', 'TMPDIR', 'TEMP', 'TMP', 'DOCKER_HOST', 'DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH'];
+
+function buildFilteredEnv(): NodeJS.ProcessEnv {
+    return Object.fromEntries(
+        Object.entries(process.env).filter(([k]) => ALLOWED_ENV_KEYS.includes(k))
+    ) as NodeJS.ProcessEnv;
+}
 
 interface ComposeService {
     name: string;
@@ -188,8 +197,7 @@ export class ComposeManager {
 
             const proc = spawn(binary, fullArgs, {
                 cwd: projectPath,
-                env: { ...process.env },
-                shell: true,
+                env: buildFilteredEnv(),
             });
 
             let stdout = '';
@@ -245,17 +253,18 @@ export class ComposeManager {
      * Generate a docker-compose.yml template
      */
     static generateComposeTemplate(type: 'web-db' | 'fullstack' | 'microservices', language: string): string {
+        const dbPassword = randomBytes(16).toString('hex');
         switch (type) {
             case 'web-db':
-                return ComposeManager.webDbTemplate(language);
+                return ComposeManager.webDbTemplate(language, dbPassword);
             case 'fullstack':
-                return ComposeManager.fullstackTemplate(language);
+                return ComposeManager.fullstackTemplate(dbPassword);
             default:
-                return ComposeManager.webDbTemplate(language);
+                return ComposeManager.webDbTemplate(language, dbPassword);
         }
     }
 
-    private static webDbTemplate(language: string): string {
+    private static webDbTemplate(language: string, dbPassword: string): string {
         const imageMap: Record<string, string> = {
             python: 'python:3.11-alpine',
             javascript: 'node:20-alpine',
@@ -279,13 +288,13 @@ export class ComposeManager {
     depends_on:
       - db
     environment:
-      DATABASE_URL: postgres://user:password@db:5432/app
+      DATABASE_URL: postgres://app_user:${dbPassword}@db:5432/app
 
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
+      POSTGRES_USER: app_user
+      POSTGRES_PASSWORD: ${dbPassword}
       POSTGRES_DB: app
     volumes:
       - db_data:/var/lib/postgresql/data
@@ -297,7 +306,7 @@ volumes:
 `;
     }
 
-    private static fullstackTemplate(language: string): string {
+    private static fullstackTemplate(dbPassword: string): string {
         return `services:
   frontend:
     image: node:20-alpine
@@ -318,14 +327,14 @@ volumes:
     depends_on:
       - db
     environment:
-      DATABASE_URL: postgres://user:password@db:5432/app
+      DATABASE_URL: postgres://app_user:${dbPassword}@db:5432/app
     command: sh -c "npm install && npm start"
 
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
+      POSTGRES_USER: app_user
+      POSTGRES_PASSWORD: ${dbPassword}
       POSTGRES_DB: app
     volumes:
       - db_data:/var/lib/postgresql/data
