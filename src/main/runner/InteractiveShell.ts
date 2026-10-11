@@ -122,7 +122,6 @@ export class InteractiveShell extends EventEmitter {
             this.outputStream.on('data', (chunk: Buffer) => {
                 const text = chunk.toString('utf8');
                 // Clean up control sequences but keep readable output
-                // eslint-disable-next-line no-control-regex
                 const cleanText = text
                     // eslint-disable-next-line no-control-regex
                     .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '') // Remove ANSI escape codes
