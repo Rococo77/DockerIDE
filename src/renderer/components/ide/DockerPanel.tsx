@@ -61,7 +61,7 @@ const DockerPanel: React.FC<{ workspacePath?: string }> = ({ workspacePath }) =>
         }
         try {
             const result = await window.electronAPI.compose.hasFile(workspacePath);
-            setHasCompose(result.success && result.data);
+            setHasCompose(result.success && result.hasCompose);
         } catch {
             setHasCompose(false);
         }
@@ -150,7 +150,10 @@ const DockerPanel: React.FC<{ workspacePath?: string }> = ({ workspacePath }) =>
         try {
             const result = await window.electronAPI.compose.ps(workspacePath);
             if (result.success) {
-                setComposeServices(result.data || 'Aucun service actif');
+                const services: { name: string; status: string; ports?: string[] }[] = result.services || [];
+                setComposeServices(services.length > 0
+                    ? services.map(s => [s.name, s.status, ...(s.ports || [])].join('  ')).join('\n')
+                    : 'Aucun service actif');
             }
         } catch { /* */ }
     };

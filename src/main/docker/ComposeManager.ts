@@ -1,14 +1,15 @@
 import { spawn, execSync, ChildProcess } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
-import { randomBytes } from 'crypto';
 
-const ALLOWED_ENV_KEYS = ['PATH', 'HOME', 'USER', 'TMPDIR', 'TEMP', 'TMP', 'DOCKER_HOST', 'DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH'];
+// Compose service names: letters, digits, '.', '_' and '-', never starting with '-'
+// so a value coming from the renderer can't be parsed as a CLI option.
+const SERVICE_NAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/;
 
-function buildFilteredEnv(): NodeJS.ProcessEnv {
-    return Object.fromEntries(
-        Object.entries(process.env).filter(([k]) => ALLOWED_ENV_KEYS.includes(k))
-    ) as NodeJS.ProcessEnv;
+function assertServiceName(service: string): void {
+    if (typeof service !== 'string' || !SERVICE_NAME_PATTERN.test(service)) {
+        throw new Error(`Invalid service name: ${service}`);
+    }
 }
 
 interface ComposeService {
@@ -160,8 +161,16 @@ export class ComposeManager {
      */
     async logs(projectPath: string, options?: { service?: string; tail?: number }): Promise<ComposeResult> {
         const args = ['logs', '--no-color'];
-        if (options?.tail) args.push('--tail', String(options.tail));
-        if (options?.service) args.push(options.service);
+        if (options?.tail !== undefined) {
+            if (!Number.isInteger(options.tail) || options.tail <= 0) {
+                throw new Error(`Invalid tail value: ${options.tail}`);
+            }
+            args.push('--tail', String(options.tail));
+        }
+        if (options?.service) {
+            assertServiceName(options.service);
+            args.push(options.service);
+        }
 
         return this.runCompose(projectPath, args);
     }
@@ -171,7 +180,10 @@ export class ComposeManager {
      */
     async restart(projectPath: string, service?: string): Promise<ComposeResult> {
         const args = ['restart'];
-        if (service) args.push(service);
+        if (service) {
+            assertServiceName(service);
+            args.push(service);
+        }
         return this.runCompose(projectPath, args);
     }
 
@@ -195,10 +207,9 @@ export class ComposeManager {
             const fullArgs = [...cmd.slice(1), ...args];
             const binary = cmd[0];
 
-            const proc = spawn(binary, fullArgs, {
-                cwd: projectPath,
-                env: buildFilteredEnv(),
-            });
+            // No shell: arguments are passed as-is. The Docker CLI inherits the
+            // user's environment (PATH/Path, SystemRoot, DOCKER_CONTEXT, XDG_RUNTIME_DIR...).
+            const proc = spawn(binary, fullArgs, { cwd: projectPath });
 
             let stdout = '';
             let stderr = '';
@@ -207,6 +218,7 @@ export class ComposeManager {
             const safeResolve = (result: ComposeResult) => {
                 if (!resolved) {
                     resolved = true;
+                    clearTimeout(timeout);
                     resolve(result);
                 }
             };
@@ -236,7 +248,7 @@ export class ComposeManager {
             });
 
             // Timeout after 2 minutes
-            setTimeout(() => {
+            const timeout = setTimeout(() => {
                 if (!resolved) {
                     proc.kill();
                     safeResolve({
@@ -247,100 +259,5 @@ export class ComposeManager {
                 }
             }, 120000);
         });
-    }
-
-    /**
-     * Generate a docker-compose.yml template
-     */
-    static generateComposeTemplate(type: 'web-db' | 'fullstack' | 'microservices', language: string): string {
-        const dbPassword = randomBytes(16).toString('hex');
-        switch (type) {
-            case 'web-db':
-                return ComposeManager.webDbTemplate(language, dbPassword);
-            case 'fullstack':
-                return ComposeManager.fullstackTemplate(dbPassword);
-            default:
-                return ComposeManager.webDbTemplate(language, dbPassword);
-        }
-    }
-
-    private static webDbTemplate(language: string, dbPassword: string): string {
-        const imageMap: Record<string, string> = {
-            python: 'python:3.11-alpine',
-            javascript: 'node:20-alpine',
-            typescript: 'node:20-alpine',
-            php: 'php:8.2-cli-alpine',
-            ruby: 'ruby:3.2-alpine',
-            go: 'golang:1.22-alpine',
-            java: 'eclipse-temurin:17-jdk-alpine',
-        };
-
-        const image = imageMap[language] || 'node:20-alpine';
-
-        return `services:
-  app:
-    image: ${image}
-    working_dir: /app
-    volumes:
-      - .:/app
-    ports:
-      - "3000:3000"
-    depends_on:
-      - db
-    environment:
-      DATABASE_URL: postgres://app_user:${dbPassword}@db:5432/app
-
-  db:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: app_user
-      POSTGRES_PASSWORD: ${dbPassword}
-      POSTGRES_DB: app
-    volumes:
-      - db_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
-
-volumes:
-  db_data:
-`;
-    }
-
-    private static fullstackTemplate(dbPassword: string): string {
-        return `services:
-  frontend:
-    image: node:20-alpine
-    working_dir: /app
-    volumes:
-      - ./frontend:/app
-    ports:
-      - "5173:5173"
-    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
-
-  backend:
-    image: node:20-alpine
-    working_dir: /app
-    volumes:
-      - ./backend:/app
-    ports:
-      - "3000:3000"
-    depends_on:
-      - db
-    environment:
-      DATABASE_URL: postgres://app_user:${dbPassword}@db:5432/app
-    command: sh -c "npm install && npm start"
-
-  db:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: app_user
-      POSTGRES_PASSWORD: ${dbPassword}
-      POSTGRES_DB: app
-    volumes:
-      - db_data:/var/lib/postgresql/data
-
-volumes:
-  db_data:
-`;
     }
 }
