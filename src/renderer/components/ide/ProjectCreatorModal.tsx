@@ -1326,7 +1326,8 @@ rails server -b 0.0.0.0
     volumes:
       - db_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      # Local-only: these dev credentials must not be reachable from the network
+      - "127.0.0.1:5432:5432"
 
 volumes:
   db_data:
@@ -1528,12 +1529,20 @@ const ProjectCreatorModal: React.FC<ProjectCreatorProps> = ({
 
     const handleBrowseFolder = async () => {
         try {
-            const result = await window.electronAPI.fs.openFolder();
+            // Only picks the location: the open project stays the workspace until creation
+            const result = await window.electronAPI.fs.selectDirectory();
             if (result.success && result.path) {
                 setProjectPath(result.path);
             }
         } catch (err) {
             console.error('Error selecting folder:', err);
+        }
+    };
+
+    const writeProjectFile = async (filePath: string, content: string) => {
+        const result = await window.electronAPI.fs.writeFile(filePath, content);
+        if (!result.success) {
+            throw new Error(result.error || `Impossible d'écrire ${filePath}`);
         }
     };
 
@@ -1547,9 +1556,12 @@ const ProjectCreatorModal: React.FC<ProjectCreatorProps> = ({
         setError(null);
 
         try {
-            // Create project directory
-            const fullProjectPath = `${projectPath}/${projectName}`;
-            await window.electronAPI.fs.createDirectory(fullProjectPath);
+            // Create the project folder: the main process checks the location and grants access to it
+            const created = await window.electronAPI.fs.createProject(projectPath, projectName);
+            if (!created.success) {
+                throw new Error(created.error || 'Impossible de créer le dossier du projet');
+            }
+            const fullProjectPath: string = created.path;
 
             // If framework requires installation, DON'T create files before (Composer needs empty dir)
             if (selectedTemplate.requiresInstall && selectedTemplate.installCommand) {
@@ -1575,7 +1587,7 @@ const ProjectCreatorModal: React.FC<ProjectCreatorProps> = ({
                         setInstallProgress('Adding configuration files...');
                         for (const file of selectedTemplate.files) {
                             const filePath = `${fullProjectPath}/${file.path}`;
-                            await window.electronAPI.fs.writeFile(filePath, file.content);
+                            await writeProjectFile(filePath, file.content);
                         }
 
                         // Always create/update .docker-ide.json with language info
@@ -1586,7 +1598,7 @@ const ProjectCreatorModal: React.FC<ProjectCreatorProps> = ({
                             template: selectedTemplate.id,
                             createdAt: new Date().toISOString(),
                         };
-                        await window.electronAPI.fs.writeFile(
+                        await writeProjectFile(
                             `${fullProjectPath}/.docker-ide.json`,
                             JSON.stringify(dockerIdeConfig, null, 2)
                         );
@@ -1610,7 +1622,7 @@ const ProjectCreatorModal: React.FC<ProjectCreatorProps> = ({
                 // No installation needed, create template files first
                 for (const file of selectedTemplate.files) {
                     const filePath = `${fullProjectPath}/${file.path}`;
-                    await window.electronAPI.fs.writeFile(filePath, file.content);
+                    await writeProjectFile(filePath, file.content);
                 }
 
                 // Always create .docker-ide.json with language info
@@ -1621,7 +1633,7 @@ const ProjectCreatorModal: React.FC<ProjectCreatorProps> = ({
                     template: selectedTemplate.id,
                     createdAt: new Date().toISOString(),
                 };
-                await window.electronAPI.fs.writeFile(
+                await writeProjectFile(
                     `${fullProjectPath}/.docker-ide.json`,
                     JSON.stringify(dockerIdeConfig, null, 2)
                 );

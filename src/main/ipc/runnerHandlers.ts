@@ -2,11 +2,15 @@ import { ipcMain, BrowserWindow } from 'electron';
 import { CodeRunner } from '../runner/CodeRunner';
 import { ShellManager } from '../runner/InteractiveShell';
 import { ComposeManager } from '../docker/ComposeManager';
+import { FileSystemManager } from '../fs/FileSystemManager';
 import log from '../logger';
 
 export function registerRunnerHandlers(): void {
     const runner = CodeRunner.getInstance();
     const shellManager = ShellManager.getInstance();
+    // Paths below are bind-mounted into containers or used as the compose working
+    // directory, so they must stay inside a folder the user opened.
+    const fsManager = FileSystemManager.getInstance();
 
     log.info('[Runner] Registering code runner IPC handlers...');
 
@@ -24,7 +28,9 @@ export function registerRunnerHandlers(): void {
                 mainWindow?.webContents.send('runner:progress', { status });
             };
 
-            const result = await runner.runCode(config, onProgress);
+            const workspacePath = await fsManager.resolveAllowedPath(config.workspacePath);
+            const filePath = await fsManager.resolveAllowedPath(config.filePath);
+            const result = await runner.runCode({ ...config, workspacePath, filePath }, onProgress);
             return { success: true, ...result };
         } catch (error: any) {
             return {
@@ -91,7 +97,10 @@ export function registerRunnerHandlers(): void {
     }) => {
         try {
             const mainWindow = BrowserWindow.getAllWindows()[0];
-            
+            const workspacePath = config.workspacePath
+                ? await fsManager.resolveAllowedPath(config.workspacePath)
+                : undefined;
+
             // Check if shell already exists
             let shell = shellManager.getShell(config.shellId);
             if (shell && shell.isActive()) {
@@ -119,7 +128,7 @@ export function registerRunnerHandlers(): void {
             const started = await shell.start({
                 image: config.image,
                 language: config.language,
-                workspacePath: config.workspacePath,
+                workspacePath,
             });
 
             return { success: started };
@@ -214,7 +223,7 @@ export function registerRunnerHandlers(): void {
             };
 
             const result = await runner.runFrameworkSetup({
-                projectPath: config.projectPath,
+                projectPath: await fsManager.resolveAllowedPath(config.projectPath),
                 image: config.image,
                 installCommand: config.installCommand,
                 onOutput,
@@ -299,12 +308,18 @@ export function registerRunnerHandlers(): void {
     const compose = ComposeManager.getInstance();
 
     ipcMain.handle('compose:has-file', async (_event, projectPath: string) => {
-        return { success: true, hasCompose: compose.hasComposeFile(projectPath) };
+        try {
+            const safePath = await fsManager.resolveAllowedPath(projectPath);
+            return { success: true, hasCompose: compose.hasComposeFile(safePath) };
+        } catch (error: any) {
+            return { success: false, error: error.message, hasCompose: false };
+        }
     });
 
     ipcMain.handle('compose:up', async (_event, projectPath: string, options?: { build?: boolean }) => {
         try {
-            const result = await compose.up(projectPath, { detach: true, build: options?.build });
+            const safePath = await fsManager.resolveAllowedPath(projectPath);
+            const result = await compose.up(safePath, { detach: true, build: options?.build });
             return { success: result.success, output: result.output, error: result.error };
         } catch (error: any) {
             return { success: false, error: error.message };
@@ -313,7 +328,8 @@ export function registerRunnerHandlers(): void {
 
     ipcMain.handle('compose:down', async (_event, projectPath: string, options?: { removeVolumes?: boolean }) => {
         try {
-            const result = await compose.down(projectPath, options);
+            const safePath = await fsManager.resolveAllowedPath(projectPath);
+            const result = await compose.down(safePath, options);
             return { success: result.success, output: result.output, error: result.error };
         } catch (error: any) {
             return { success: false, error: error.message };
@@ -322,7 +338,8 @@ export function registerRunnerHandlers(): void {
 
     ipcMain.handle('compose:ps', async (_event, projectPath: string) => {
         try {
-            const services = await compose.ps(projectPath);
+            const safePath = await fsManager.resolveAllowedPath(projectPath);
+            const services = await compose.ps(safePath);
             return { success: true, services };
         } catch (error: any) {
             return { success: false, error: error.message, services: [] };
@@ -331,7 +348,8 @@ export function registerRunnerHandlers(): void {
 
     ipcMain.handle('compose:logs', async (_event, projectPath: string, options?: { service?: string; tail?: number }) => {
         try {
-            const result = await compose.logs(projectPath, options);
+            const safePath = await fsManager.resolveAllowedPath(projectPath);
+            const result = await compose.logs(safePath, options);
             return { success: result.success, output: result.output, error: result.error };
         } catch (error: any) {
             return { success: false, error: error.message };
@@ -340,7 +358,8 @@ export function registerRunnerHandlers(): void {
 
     ipcMain.handle('compose:restart', async (_event, projectPath: string, service?: string) => {
         try {
-            const result = await compose.restart(projectPath, service);
+            const safePath = await fsManager.resolveAllowedPath(projectPath);
+            const result = await compose.restart(safePath, service);
             return { success: result.success, output: result.output, error: result.error };
         } catch (error: any) {
             return { success: false, error: error.message };

@@ -16,9 +16,30 @@ export interface FileContent {
     encoding?: string;
 }
 
+// Same rule as the project creator's name field
+const PROJECT_NAME_PATTERN = /^[a-zA-Z0-9_-]{1,100}$/;
+
+/**
+ * True if `target` is `root` itself or somewhere below it. path.relative handles
+ * filesystem roots ('/', 'D:\') and compares case-insensitively on Windows.
+ */
+export function isPathInside(root: string, target: string, pathApi: path.PlatformPath = path): boolean {
+    const relative = pathApi.relative(root, target);
+    return relative === '' || (
+        relative !== '..' &&
+        !relative.startsWith(`..${pathApi.sep}`) &&
+        !pathApi.isAbsolute(relative)
+    );
+}
+
 export class FileSystemManager {
     private static instance: FileSystemManager;
     private currentWorkspace: string | null = null;
+    // Real paths of the folders the renderer may access: folders the user opened through
+    // the native dialog, and project folders created through createProject.
+    private allowedRoots = new Set<string>();
+    // Folder last picked in the project creator's dialog, the only place a project may be created
+    private projectParentDirectory: string | null = null;
 
     // eslint-disable-next-line @typescript-eslint/no-empty-function
     private constructor() {}
@@ -31,14 +52,16 @@ export class FileSystemManager {
     }
 
     /**
-     * Set the current workspace directory
+     * Set the current workspace directory. This grants the renderer access to the folder,
+     * so it must only be called with a folder the user picked in a native dialog.
      */
     setWorkspace(workspacePath: string): void {
-        if (fs.existsSync(workspacePath) && fs.statSync(workspacePath).isDirectory()) {
-            this.currentWorkspace = workspacePath;
-        } else {
+        if (!fs.existsSync(workspacePath) || !fs.statSync(workspacePath).isDirectory()) {
             throw new Error(`Invalid workspace path: ${workspacePath}`);
         }
+        // Native realpath, like fs.promises.realpath used by resolveAllowedPath
+        this.allowedRoots.add(fs.realpathSync.native(workspacePath));
+        this.currentWorkspace = workspacePath;
     }
 
     /**
@@ -48,21 +71,103 @@ export class FileSystemManager {
         return this.currentWorkspace;
     }
 
-    private assertInWorkspace(inputPath: string): string {
-        if (!this.currentWorkspace) throw new Error('No workspace set');
-        const resolved = path.resolve(inputPath);
-        const workspace = path.resolve(this.currentWorkspace);
-        if (resolved !== workspace && !resolved.startsWith(workspace + path.sep)) {
-            throw new Error('Access denied: path outside workspace');
+    /**
+     * Remember the folder picked in the project creator's native dialog
+     */
+    setProjectParentDirectory(dirPath: string): void {
+        this.projectParentDirectory = path.resolve(dirPath);
+    }
+
+    /**
+     * Create `<parentDir>/<name>` for a new project and grant access to it. The parent must be
+     * the folder picked in the dialog, and the project folder must be new or empty so that
+     * existing files are never overwritten.
+     */
+    async createProject(parentDir: string, name: string): Promise<string> {
+        if (!this.projectParentDirectory || typeof parentDir !== 'string'
+            || path.resolve(parentDir) !== this.projectParentDirectory) {
+            throw new Error('Access denied: pick the project location with the folder dialog');
         }
-        return resolved;
+        if (typeof name !== 'string' || !PROJECT_NAME_PATTERN.test(name)) {
+            throw new Error(`Invalid project name: ${name}`);
+        }
+
+        const projectPath = path.join(this.projectParentDirectory, name);
+        try {
+            await fs.promises.mkdir(projectPath);
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+            const stats = await fs.promises.lstat(projectPath);
+            if (!stats.isDirectory() || (await fs.promises.readdir(projectPath)).length > 0) {
+                throw new Error(`Folder already exists and is not empty: ${projectPath}`);
+            }
+        }
+
+        this.allowedRoots.add(await fs.promises.realpath(projectPath));
+        this.currentWorkspace = projectPath;
+        return projectPath;
+    }
+
+    /**
+     * Resolve a path received from the renderer and check that it stays inside an allowed
+     * folder once symlinks are followed. Returns the absolute path to operate on.
+     */
+    async resolveAllowedPath(inputPath: string): Promise<string> {
+        if (typeof inputPath !== 'string' || inputPath === '') {
+            throw new Error('Invalid path');
+        }
+        if (this.allowedRoots.size === 0) {
+            throw new Error('No workspace set');
+        }
+
+        const resolved = path.resolve(inputPath);
+        const realPath = await this.realPathOf(resolved);
+        for (const root of this.allowedRoots) {
+            if (isPathInside(root, realPath)) return resolved;
+        }
+        log.warn('[FileSystem] Access denied outside workspace:', resolved);
+        throw new Error('Access denied: path outside workspace');
+    }
+
+    /**
+     * Real path of `target` with symlinks followed. For a path that doesn't exist yet,
+     * resolve its closest existing ancestor and append the missing segments.
+     */
+    private async realPathOf(target: string): Promise<string> {
+        const missingSegments: string[] = [];
+        let current = target;
+        for (;;) {
+            try {
+                const realPath = await fs.promises.realpath(current);
+                return path.join(realPath, ...missingSegments.reverse());
+            } catch (error) {
+                if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+                // A symlink to a missing target: writing through it would create a file
+                // wherever it points, which can't be checked, so it is refused.
+                if (await this.isSymbolicLink(current)) {
+                    throw new Error('Access denied: broken symbolic link');
+                }
+                const parent = path.dirname(current);
+                if (parent === current) throw error;
+                missingSegments.push(path.basename(current));
+                current = parent;
+            }
+        }
+    }
+
+    private async isSymbolicLink(target: string): Promise<boolean> {
+        try {
+            return (await fs.promises.lstat(target)).isSymbolicLink();
+        } catch {
+            return false;
+        }
     }
 
     /**
      * Read directory contents and return tree structure
      */
     async readDirectory(dirPath: string, depth = 3): Promise<FileNode[]> {
-        const safePath = this.assertInWorkspace(dirPath);
+        const safePath = await this.resolveAllowedPath(dirPath);
         const result: FileNode[] = [];
 
         try {
@@ -112,7 +217,7 @@ export class FileSystemManager {
      * Read file content
      */
     async readFile(filePath: string): Promise<FileContent> {
-        const safePath = this.assertInWorkspace(filePath);
+        const safePath = await this.resolveAllowedPath(filePath);
         try {
             const content = await fs.promises.readFile(safePath, 'utf-8');
             return {
@@ -130,7 +235,7 @@ export class FileSystemManager {
      * Write file content
      */
     async writeFile(filePath: string, content: string): Promise<void> {
-        const safePath = this.assertInWorkspace(filePath);
+        const safePath = await this.resolveAllowedPath(filePath);
         try {
             const dir = path.dirname(safePath);
             await fs.promises.mkdir(dir, { recursive: true });
@@ -145,7 +250,7 @@ export class FileSystemManager {
      * Create a new file
      */
     async createFile(filePath: string, content = ''): Promise<void> {
-        const safePath = this.assertInWorkspace(filePath);
+        const safePath = await this.resolveAllowedPath(filePath);
         if (fs.existsSync(safePath)) {
             throw new Error(`File already exists: ${safePath}`);
         }
@@ -156,7 +261,7 @@ export class FileSystemManager {
      * Create a new directory
      */
     async createDirectory(dirPath: string): Promise<void> {
-        const safePath = this.assertInWorkspace(dirPath);
+        const safePath = await this.resolveAllowedPath(dirPath);
         try {
             await fs.promises.mkdir(safePath, { recursive: true });
         } catch (error) {
@@ -169,7 +274,7 @@ export class FileSystemManager {
      * Delete a file or directory
      */
     async delete(itemPath: string): Promise<void> {
-        const safePath = this.assertInWorkspace(itemPath);
+        const safePath = await this.resolveAllowedPath(itemPath);
         try {
             const stat = await fs.promises.stat(safePath);
             if (stat.isDirectory()) {
@@ -187,8 +292,8 @@ export class FileSystemManager {
      * Rename a file or directory
      */
     async rename(oldPath: string, newPath: string): Promise<void> {
-        const safeOld = this.assertInWorkspace(oldPath);
-        const safeNew = this.assertInWorkspace(newPath);
+        const safeOld = await this.resolveAllowedPath(oldPath);
+        const safeNew = await this.resolveAllowedPath(newPath);
         try {
             await fs.promises.rename(safeOld, safeNew);
         } catch (error) {
@@ -201,8 +306,9 @@ export class FileSystemManager {
      * Check if path exists
      */
     async exists(itemPath: string): Promise<boolean> {
+        const safePath = await this.resolveAllowedPath(itemPath);
         try {
-            await fs.promises.access(itemPath);
+            await fs.promises.access(safePath);
             return true;
         } catch {
             return false;
@@ -213,7 +319,8 @@ export class FileSystemManager {
      * Get file stats
      */
     async getStats(itemPath: string): Promise<fs.Stats> {
-        return fs.promises.stat(itemPath);
+        const safePath = await this.resolveAllowedPath(itemPath);
+        return fs.promises.stat(safePath);
     }
 
     /**

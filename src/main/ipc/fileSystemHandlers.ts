@@ -28,11 +28,30 @@ export function registerFileSystemHandlers(): void {
         return fsManager.getWorkspace();
     });
 
-    // Set workspace
-    ipcMain.handle('fs:set-workspace', async (_, workspacePath: string) => {
+    // There is deliberately no fs:set-workspace: the renderer only gets access to folders
+    // the user picks in a native dialog (fs:open-folder) or creates with fs:create-project.
+
+    // Pick the location of a new project, without changing the open workspace
+    ipcMain.handle('fs:select-directory', async () => {
+        const mainWindow = BrowserWindow.getAllWindows()[0];
+        const result = await dialog.showOpenDialog(mainWindow, {
+            properties: ['openDirectory', 'createDirectory'],
+            title: 'Choisir l\'emplacement du projet'
+        });
+
+        if (!result.canceled && result.filePaths.length > 0) {
+            const folderPath = result.filePaths[0];
+            fsManager.setProjectParentDirectory(folderPath);
+            return { success: true, path: folderPath };
+        }
+        return { success: false, path: null };
+    });
+
+    // Create a new project folder inside the location picked with fs:select-directory
+    ipcMain.handle('fs:create-project', async (_, parentDir: string, name: string) => {
         try {
-            fsManager.setWorkspace(workspacePath);
-            return { success: true };
+            const projectPath = await fsManager.createProject(parentDir, name);
+            return { success: true, path: projectPath };
         } catch (error: any) {
             return { success: false, error: error.message };
         }

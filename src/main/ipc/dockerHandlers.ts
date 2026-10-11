@@ -61,14 +61,9 @@ export function registerDockerHandlers() {
         }
     });
 
-    ipcMain.handle('container:create', async (_event, config) => {
-        try {
-            const container = await containerManager.createContainer(config);
-            return { success: true, data: container.id };
-        } catch (error: any) {
-            return { success: false, error: error.message };
-        }
-    });
+    // No generic container:create / container:exec: a container config coming from the
+    // renderer could bind-mount any host folder and bypass the workspace checks.
+    // Project containers are created by the runner, from validated paths.
 
     ipcMain.handle('container:start', async (_event, id: string) => {
         try {
@@ -101,15 +96,6 @@ export function registerDockerHandlers() {
         try {
             const logs = await containerManager.getContainerLogs(id, opts);
             return { success: true, data: logs };
-        } catch (error: any) {
-            return { success: false, error: error.message };
-        }
-    });
-
-    ipcMain.handle('container:exec', async (_event, id: string, cmd: string[] | string) => {
-        try {
-            const output = await containerManager.execInContainer(id, cmd);
-            return { success: true, data: output };
         } catch (error: any) {
             return { success: false, error: error.message };
         }

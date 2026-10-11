@@ -25,12 +25,10 @@ const api = {
         ping: () => ipcRenderer.invoke('docker:ping'),
         // containers
         listContainers: (all = true) => ipcRenderer.invoke('container:list', all),
-        createContainer: (config: any) => ipcRenderer.invoke('container:create', config),
         startContainer: (id: string) => ipcRenderer.invoke('container:start', id),
         stopContainer: (id: string) => ipcRenderer.invoke('container:stop', id),
         removeContainer: (id: string, opts?: any) => ipcRenderer.invoke('container:remove', id, opts),
         getContainerLogs: (id: string, opts?: any) => ipcRenderer.invoke('container:logs', id, opts),
-        execInContainer: (id: string, cmd: string[] | string) => ipcRenderer.invoke('container:exec', id, cmd),
         getContainerStats: (id: string) => ipcRenderer.invoke('container:stats', id),
         // images
         listImages: () => ipcRenderer.invoke('image:list'),
@@ -45,7 +43,9 @@ const api = {
         // Folder operations
         openFolder: () => ipcRenderer.invoke('fs:open-folder'),
         getWorkspace: () => ipcRenderer.invoke('fs:get-workspace'),
-        setWorkspace: (path: string) => ipcRenderer.invoke('fs:set-workspace', path),
+        // New project: pick its location, then create the folder there
+        selectDirectory: () => ipcRenderer.invoke('fs:select-directory'),
+        createProject: (parentDir: string, name: string) => ipcRenderer.invoke('fs:create-project', parentDir, name),
         // File/directory operations
         readDirectory: (path: string, depth?: number) => ipcRenderer.invoke('fs:read-directory', path, depth),
         readFile: (path: string) => ipcRenderer.invoke('fs:read-file', path),
