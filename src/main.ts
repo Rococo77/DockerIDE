@@ -16,9 +16,15 @@ log.info('DockerIDE starting up', { version: app.getVersion() });
 
 const isDev = process.env.NODE_ENV === 'development' || !!MAIN_WINDOW_VITE_DEV_SERVER_URL;
 
-// Enable auto-updates from GitHub Releases in packaged builds only
-if (app.isPackaged) {
-  updateElectronApp({ logger: log });
+// Auto-updates from GitHub Releases (via update.electronjs.org), Windows only for now:
+// Squirrel.Mac throws on unsigned apps and Electron's autoUpdater doesn't support Linux.
+// An updater problem must never prevent the app from starting.
+if (app.isPackaged && !started && process.platform === 'win32') {
+  try {
+    updateElectronApp({ repo: 'Rococo77/DockerIDE', logger: log });
+  } catch (err) {
+    log.error('Auto-update disabled:', err);
+  }
 }
 
 let mainWindow: BrowserWindow | null = null;
