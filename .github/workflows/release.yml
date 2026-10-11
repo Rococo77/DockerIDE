@@ -18,6 +18,8 @@ jobs:
         with:
           node-version: '24'
           cache: 'npm'
+      - name: Install packaging tools (rpmbuild for RPM, fakeroot/dpkg for DEB)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends rpm fakeroot dpkg
       - run: npm ci
       - run: npm run typecheck
       - run: npm test

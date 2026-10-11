@@ -11,7 +11,7 @@ env:
 
 jobs:
   ci:
-    name: Lint, typecheck & test
+    name: Lint, typecheck, test & package
     runs-on: ubuntu-latest
 
     steps:
@@ -34,6 +34,12 @@ jobs:
 
       - name: Run tests
         run: npm test
+
+      # Catches bundling problems (e.g. native modules) before a release tag does
+      - name: Package app
+        run: npm run package
+        env:
+          NODE_ENV: production
 
       - name: Security audit
         run: npm audit --audit-level=high
