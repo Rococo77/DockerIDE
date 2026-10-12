@@ -50,12 +50,19 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
     const inputRef = useRef<HTMLInputElement>(null);
     const terminalRef = useRef<HTMLDivElement>(null);
 
-    const appendLine = useCallback((type: TerminalLine['type'], content: string) => {
-        setLines(prev => addLines(prev, [{ type, content }]));
+    // Every addition goes through here, so that the terminal keeps at most MAX_TERMINAL_LINES
+    const appendLines = useCallback((newLines: TerminalLine[]) => {
+        setLines(prev => addLines(prev, newLines));
     }, []);
+    // Project the active shell belongs to: another project needs another shell
+    const shellWorkspaceRef = useRef<string | undefined>(undefined);
 
     const connectToProject = async () => {
-        if (shellActive || !workspacePath) return;
+        if (!workspacePath) return;
+        // Already connected to this project
+        if (shellActive && shellWorkspaceRef.current === workspacePath) return;
+        // A shell of the previous project would keep running commands in that project
+        await stopShell();
 
         const newShellId = `shell-${Date.now()}`;
         setShellId(newShellId);
@@ -77,20 +84,20 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
                     if (config.image) projectImage = config.image;
                     if (config.language) projectLanguage = config.language;
                     if (config.framework) {
-                        setLines(prev => [...prev, {
+                        appendLines([{
                             type: 'system',
                             content: `Framework: ${config.framework}`
                         }]);
                     }
                 }
             } catch {
-                setLines(prev => [...prev, {
+                appendLines([{
                     type: 'system',
                     content: 'No .docker-ide.json found, using default image'
                 }]);
             }
 
-            setLines(prev => [...prev, {
+            appendLines([{
                 type: 'system',
                 content: `Image: ${projectImage}`
             }]);
@@ -103,26 +110,27 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
             });
 
             if (result.success) {
+                shellWorkspaceRef.current = workspacePath;
                 setShellActive(true);
                 setActiveTab('shell');
-                setLines(prev => [...prev, {
+                appendLines([{
                     type: 'success',
                     content: 'Connected to Docker container'
                 }]);
             } else {
-                setLines(prev => [...prev, {
+                appendLines([{
                     type: 'error',
                     content: result.error || 'Connection error'
                 }]);
             }
         } catch (err: any) {
-            setLines(prev => [...prev, { type: 'error', content: err.message }]);
+            appendLines([{ type: 'error', content: err.message }]);
         }
     };
 
     useImperativeHandle(ref, () => ({
         addLine: (type: TerminalLine['type'], content: string) => {
-            setLines(prev => [...prev, { type, content, timestamp: new Date() }]);
+            appendLines([{ type, content, timestamp: new Date() }]);
         },
         clear: () => {
             setLines([{ type: 'system', content: 'Terminal cleared' }]);
@@ -132,7 +140,7 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
         },
         connectToProject,
         isShellActive: () => shellActive,
-    }), [shellActive, workspacePath]);
+    }), [shellActive, shellId, workspacePath]);
 
     useEffect(() => {
         if (visible && inputRef.current) {
@@ -148,7 +156,7 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
 
     useEffect(() => {
         const handleProgress = (data: { status: string }) => {
-            setLines(prev => [...prev, { type: 'system', content: data.status }]);
+            appendLines([{ type: 'system', content: data.status }]);
         };
 
         const cleanup = window.electronAPI?.runner?.onProgress(handleProgress);
@@ -160,7 +168,7 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
             if (data.shellId === shellId) {
                 const lineType = data.type === 'error' ? 'error' :
                                 data.type === 'system' ? 'system' : 'output';
-                setLines(prev => [...prev, {
+                appendLines([{
                     type: lineType as TerminalLine['type'],
                     content: data.data
                 }]);
@@ -170,7 +178,8 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
         const handleClosed = (data: { shellId: string }) => {
             if (data.shellId === shellId) {
                 setShellActive(false);
-                setLines(prev => [...prev, { type: 'system', content: 'Shell closed' }]);
+                shellWorkspaceRef.current = undefined;
+                appendLines([{ type: 'system', content: 'Shell closed' }]);
             }
         };
 
@@ -184,6 +193,8 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
     }, [shellId]);
 
     const startShell = async (shellOption: typeof SHELL_OPTIONS[0]) => {
+        // Replace the current shell instead of leaving its container running
+        await stopShell();
         const newShellId = `shell-${Date.now()}`;
         setShellId(newShellId);
         setShowShellPicker(false);
@@ -198,29 +209,38 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
             });
 
             if (result.success) {
+                shellWorkspaceRef.current = workspacePath;
                 setShellActive(true);
                 setActiveTab('shell');
             } else {
-                setLines(prev => [...prev, {
+                appendLines([{
                     type: 'error',
                     content: result.error || 'Shell start error'
                 }]);
             }
         } catch (err: any) {
-            setLines(prev => [...prev, { type: 'error', content: err.message }]);
+            appendLines([{ type: 'error', content: err.message }]);
         }
     };
 
     const stopShell = async () => {
-        if (shellId) {
+        if (shellId && shellActive) {
             await window.electronAPI.shell.stop(shellId);
-            setShellActive(false);
+        }
+        setShellActive(false);
+        shellWorkspaceRef.current = undefined;
+    };
+
+    // Stop the program being run (e.g. an endless loop)
+    const stopRun = async () => {
+        if (workspacePath) {
+            await window.electronAPI.runner.stop(workspacePath);
         }
     };
 
     const executeInDocker = async (filePath: string, language: string) => {
         if (!workspacePath) {
-            setLines(prev => [...prev, {
+            appendLines([{
                 type: 'error',
                 content: 'No project open. Open a folder first.',
             }]);
@@ -228,7 +248,7 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
         }
 
         const fileName = filePath.split(/[/\\]/).pop() || filePath;
-        setLines(prev => [...prev, {
+        appendLines([{
             type: 'system',
             content: `> Running ${fileName} (${language})...`,
         }]);
@@ -241,35 +261,25 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
                 language,
             });
 
-            if (result.success) {
-                if (result.output) {
-                    result.output.split('\n').forEach((line: string) => {
-                        if (line.trim()) {
-                            setLines(prev => [...prev, { type: 'output', content: line }]);
-                        }
-                    });
-                }
-                if (result.error) {
-                    result.error.split('\n').forEach((line: string) => {
-                        if (line.trim()) {
-                            setLines(prev => [...prev, { type: 'error', content: line }]);
-                        }
-                    });
-                }
-                if (result.executionTime) {
-                    setLines(prev => [...prev, {
-                        type: 'success',
-                        content: `Done in ${result.executionTime}ms (exit: ${result.exitCode || 0})`,
-                    }]);
-                }
+            const toLines = (text: string | undefined, type: TerminalLine['type']): TerminalLine[] =>
+                (text || '').split('\n').filter(line => line.trim()).map(content => ({ type, content }));
+
+            if (typeof result.exitCode === 'number') {
+                // The program ran: show everything it printed, even when it failed
+                const time = result.executionTime ? ` in ${result.executionTime}ms` : '';
+                appendLines([
+                    ...toLines(result.output, 'output'),
+                    ...toLines(result.error, 'error'),
+                    result.exitCode === 0
+                        ? { type: 'success', content: `Done${time} (exit: 0)` }
+                        : { type: 'error', content: `Exited with code ${result.exitCode}${time}` },
+                ]);
             } else {
-                setLines(prev => [...prev, {
-                    type: 'error',
-                    content: `Error: ${result.error || 'Unknown error'}`,
-                }]);
+                // The runner itself failed (image download, container creation...)
+                appendLines([{ type: 'error', content: `Error: ${result.error || 'Unknown error'}` }]);
             }
         } catch (err: any) {
-            setLines(prev => [...prev, {
+            appendLines([{
                 type: 'error',
                 content: `Error: ${err.message || err}`,
             }]);
@@ -282,12 +292,12 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
         if (!cmd.trim()) return;
 
         if (shellActive && activeTab === 'shell') {
-            setLines(prev => [...prev, { type: 'input', content: `$ ${cmd}` }]);
+            appendLines([{ type: 'input', content: `$ ${cmd}` }]);
             await window.electronAPI.shell.write(shellId, cmd);
             return;
         }
 
-        setLines(prev => [...prev, { type: 'input', content: `$ ${cmd}` }]);
+        appendLines([{ type: 'input', content: `$ ${cmd}` }]);
 
         if (cmd === 'clear') {
             setLines([{ type: 'system', content: 'Terminal cleared' }]);
@@ -295,8 +305,7 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
         }
 
         if (cmd === 'help') {
-            setLines(prev => [
-                ...prev,
+            appendLines([
                 { type: 'system', content: 'Available commands:' },
                 { type: 'output', content: '  run <file>     Run a file in Docker' },
                 { type: 'output', content: '  shell          Open an interactive Docker shell' },
@@ -319,12 +328,12 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
             const langMap: Record<string, string> = {
                 py: 'python', js: 'javascript', ts: 'typescript',
                 java: 'java', go: 'go', rs: 'rust',
-                rb: 'ruby', php: 'php', c: 'c', cpp: 'cpp',
+                rb: 'ruby', php: 'php', c: 'c', cpp: 'cpp', mjs: 'javascript',
             };
             const language = langMap[ext || ''] || 'plaintext';
 
             if (language === 'plaintext') {
-                setLines(prev => [...prev, {
+                appendLines([{
                     type: 'error',
                     content: `Unrecognized extension: .${ext}`,
                 }]);
@@ -336,14 +345,14 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
             return;
         }
 
-        setLines(prev => [...prev, {
+        appendLines([{
             type: 'error',
             content: `Unknown command: ${cmd}. Type "help" for available commands.`,
         }]);
     };
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter' && !isRunning) {
+        if (e.key === 'Enter' && !runBlocksInput) {
             executeCommand(currentInput);
             setCurrentInput('');
         }
@@ -351,6 +360,9 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
             window.electronAPI.shell.write(shellId, '\x03');
         }
     };
+
+    // Only the Terminal tab waits for a run: the shell stays usable
+    const runBlocksInput = isRunning && activeTab === 'terminal';
 
     if (!visible) return null;
 
@@ -391,6 +403,11 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
                                 </button>
                             )}
                         </>
+                    )}
+                    {isRunning && (
+                        <button className="icon-btn" title="Stop" onClick={stopRun}>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="1"/></svg>
+                        </button>
                     )}
                     <button
                         className="icon-btn"
@@ -443,9 +460,9 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
                         value={currentInput}
                         onChange={(e) => setCurrentInput(e.target.value)}
                         onKeyDown={handleKeyDown}
-                        disabled={isRunning}
+                        disabled={runBlocksInput}
                         placeholder={
-                            isRunning ? 'Running...' :
+                            runBlocksInput ? 'Running...' :
                             shellActive && activeTab === 'shell' ? 'Enter a shell command...' :
                             'Type a command...'
                         }
