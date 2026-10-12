@@ -418,6 +418,10 @@ export class CodeRunner {
                 }
             });
 
+            // Wait for the exit before starting: the container is auto-removed when it exits,
+            // so a wait() sent after a command that fails right away found no container
+            const exited = container.wait({ condition: 'next-exit' });
+            exited.catch((): void => undefined); // awaited below; don't report it as unhandled
             await container.start();
 
             // Wait for container to finish (5 min timeout for framework install)
@@ -427,7 +431,7 @@ export class CodeRunner {
             });
             let result: { StatusCode: number };
             try {
-                result = await Promise.race([container.wait(), timeout]);
+                result = await Promise.race([exited, timeout]);
             } catch (error) {
                 // Stop the install rather than letting it keep writing into the project
                 // in the background (AutoRemove then deletes the container)

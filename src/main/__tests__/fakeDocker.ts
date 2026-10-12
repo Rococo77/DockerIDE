@@ -28,6 +28,7 @@ export interface FakeContainer {
     labels: Record<string, string>;
     config: any;
     waiting: http.ServerResponse[];
+    attached?: http.ServerResponse[];
 }
 
 export interface FakeDockerOptions {
@@ -37,6 +38,8 @@ export interface FakeDockerOptions {
     // What an exec writes on its stream, chunk by chunk, and its exit code. With `hang`,
     // the program never ends (until the container is restarted)
     execResult?: (exec: FakeExec) => { chunks: Buffer[]; exitCode: number; hang?: boolean };
+    // How long one-shot (auto-removed) containers "run" before exiting; 0 = right away
+    oneShotRunTime?: number;
 }
 
 export interface FakeDocker {
@@ -46,6 +49,8 @@ export interface FakeDocker {
     createCalls: number;
     // Bytes received on shell attach connections (what the shell would read on stdin)
     attachInput: Buffer;
+    // One-shot containers (framework setup) and the files their folder had when they started
+    oneShotRuns: { cmd: string[]; filesAtStart: string[] }[];
     close(): Promise<void>;
 }
 
@@ -59,6 +64,7 @@ export async function startFakeDocker(socketPath: string, options: FakeDockerOpt
         execs: [],
         createCalls: 0,
         attachInput: Buffer.alloc(0),
+        oneShotRuns: [],
         close: () => new Promise<void>((resolve) => {
             sockets.forEach((socket) => socket.destroy());
             server.close(() => resolve());
@@ -68,6 +74,7 @@ export async function startFakeDocker(socketPath: string, options: FakeDockerOpt
     const stopContainer = (container: FakeContainer) => {
         container.running = false;
         container.waiting.splice(0).forEach((res) => res.end(JSON.stringify({ StatusCode: 0 })));
+        (container.attached ?? []).splice(0).forEach((res) => res.end());
     };
 
     const server = http.createServer((req, res) => {
@@ -84,6 +91,27 @@ export async function startFakeDocker(socketPath: string, options: FakeDockerOpt
                 fake.containers.find((c) => c.id === idOrName || c.name === idOrName);
             let match: RegExpMatchArray | null;
 
+            if (route === '/_ping') {
+                res.writeHead(200);
+                return res.end('OK');
+            }
+            if (route === '/info') {
+                return json(200, { OperatingSystem: 'Fake Docker', Architecture: 'x86_64', Containers: fake.containers.length, Images: fake.images.size });
+            }
+            if (route === '/version') return json(200, { Version: '99.0.0-fake' });
+            if (route === '/images/json') {
+                return json(200, [...fake.images].map((tag, i) => ({ Id: `sha256:${i}`, RepoTags: [tag], Size: 1000, Created: 0 })));
+            }
+            if ((match = route.match(/^\/containers\/([^/]+)\/attach$/))) {
+                // Plain (non-upgraded) attach, used for framework setup output
+                const container = findContainer(match[1]);
+                if (!container) return json(404, { message: `No such container: ${match[1]}` });
+                res.writeHead(200, { 'Content-Type': 'application/vnd.docker.raw-stream' });
+                // Docker answers right away; Node would wait for the first write
+                res.flushHeaders();
+                (container.attached ??= []).push(res);
+                return;
+            }
             if ((match = route.match(/^\/images\/(.+)\/json$/))) {
                 const name = decodeURIComponent(match[1]);
                 return fake.images.has(name) ? json(200, { Id: name }) : json(404, { message: `No such image: ${name}` });
@@ -134,10 +162,29 @@ export async function startFakeDocker(socketPath: string, options: FakeDockerOpt
                             State: { Running: container.running },
                             Config: { Image: container.image, Labels: container.labels },
                         });
-                    case 'start':
+                    case 'start': {
                         container.running = true;
+                        const host = container.config.HostConfig ?? {};
+                        if (host.AutoRemove && !container.config.OpenStdin) {
+                            // One-shot container (framework setup): its command "runs", then it exits
+                            const source = (host.Binds?.[0] ?? '').split(':')[0];
+                            fake.oneShotRuns.push({
+                                cmd: container.config.Cmd,
+                                filesAtStart: source && fs.existsSync(source) ? fs.readdirSync(source).sort() : [],
+                            });
+                            const exit = () => {
+                                stopContainer(container);
+                                fake.containers = fake.containers.filter((c) => c !== container);
+                            };
+                            if (options.oneShotRunTime === 0) {
+                                exit();
+                            } else {
+                                setTimeout(exit, options.oneShotRunTime ?? 50);
+                            }
+                        }
                         res.writeHead(204);
                         return res.end();
+                    }
                     case 'stop':
                         stopContainer(container);
                         res.writeHead(204);

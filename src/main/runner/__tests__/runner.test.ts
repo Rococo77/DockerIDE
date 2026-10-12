@@ -221,6 +221,21 @@ printf '#!/bin/sh\\necho ran\\n' > "$out" && chmod +x "$out"
         });
     });
 
+    describe('framework setup', () => {
+        it('gets the result of an install command that exits right away', async () => {
+            // The container is auto-removed as soon as it exits: waiting only after
+            // start() used to find no container
+            const fake = await useFakeDocker({ images: ['node:20-alpine'], oneShotRunTime: 0 });
+
+            const result = await CodeRunner.getInstance().runFrameworkSetup({
+                projectPath: '/projects/api', image: 'node:20-alpine', installCommand: 'npm install',
+            });
+
+            expect(result).toMatchObject({ success: true, exitCode: 0 });
+            expect(fake.oneShotRuns.map((r) => r.cmd)).toEqual([['sh', '-c', 'npm install']]);
+        });
+    });
+
     describe('images', () => {
         it('checks the exact image tag', async () => {
             await useFakeDocker({ images: ['python:3.11-alpine'] });

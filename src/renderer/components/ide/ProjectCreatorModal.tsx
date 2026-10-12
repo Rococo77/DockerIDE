@@ -21,6 +21,10 @@ interface ProjectTemplate {
     description: string;
     framework?: string;
     requiresInstall?: boolean;
+    // The install command uses the template files (npm install, pip install -r
+    // requirements.txt...), so they are written first. Otherwise the command scaffolds
+    // the project (composer create-project, create-vite...) and needs an empty folder.
+    installNeedsFiles?: boolean;
     installCommand?: string;
     startCommand?: string;
     setupImage?: string; // Image spécifique pour l'installation (ex: composer pour PHP)
@@ -208,6 +212,7 @@ Appuyez sur **F5** ou cliquez sur le bouton **Exécuter** pour lancer le program
                 description: 'Application Web Flask légère',
                 framework: 'Flask',
                 requiresInstall: true,
+                installNeedsFiles: true,
                 installCommand: 'pip install -r requirements.txt',
                 startCommand: 'python app.py',
                 files: [
@@ -326,6 +331,7 @@ Créez un superuser: \`python manage.py createsuperuser\`
                 description: 'API moderne et rapide',
                 framework: 'FastAPI',
                 requiresInstall: true,
+                installNeedsFiles: true,
                 installCommand: 'pip install -r requirements.txt',
                 startCommand: 'uvicorn main:app --host 0.0.0.0 --port 8000 --reload',
                 files: [
@@ -443,6 +449,7 @@ main();
                 description: 'API REST avec Express.js',
                 framework: 'Express',
                 requiresInstall: true,
+                installNeedsFiles: true,
                 installCommand: 'npm install',
                 startCommand: 'npm start',
                 files: [
@@ -691,6 +698,7 @@ API accessible sur http://localhost:3000
                 name: 'Projet basique',
                 description: 'TypeScript simple avec ts-node',
                 requiresInstall: true,
+                installNeedsFiles: true,
                 installCommand: 'npm install',
                 files: [
                     {
@@ -931,6 +939,7 @@ go 1.21
                 description: 'API REST avec Gin',
                 framework: 'Gin',
                 requiresInstall: true,
+                installNeedsFiles: true,
                 installCommand: 'go mod tidy',
                 startCommand: 'go run main.go',
                 files: [
@@ -1004,6 +1013,7 @@ require github.com/gin-gonic/gin v1.9.1
                 description: 'API ultra-rapide avec Fiber',
                 framework: 'Fiber',
                 requiresInstall: true,
+                installNeedsFiles: true,
                 installCommand: 'go mod tidy',
                 startCommand: 'go run main.go',
                 files: [
@@ -1094,6 +1104,7 @@ fn main() {
                 description: 'API REST avec Actix',
                 framework: 'Actix',
                 requiresInstall: true,
+                installNeedsFiles: true,
                 installCommand: 'cargo build',
                 startCommand: 'cargo run',
                 files: [
@@ -1201,6 +1212,7 @@ puts "Nombres doublés: #{doubled}"
                 description: 'API légère avec Sinatra',
                 framework: 'Sinatra',
                 requiresInstall: true,
+                installNeedsFiles: true,
                 installCommand: 'bundle install',
                 startCommand: 'ruby app.rb',
                 files: [
@@ -1482,6 +1494,9 @@ const ProjectCreatorModal: React.FC<ProjectCreatorProps> = ({
     const [projectPath, setProjectPath] = useState('');
     const [isCreating, setIsCreating] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    // Folder created by this wizard, reused when the user retries a failed install
+    // (creating it again would fail: it isn't empty anymore)
+    const [createdProject, setCreatedProject] = useState<{ target: string; path: string } | null>(null);
     
     // Installation state
     const [installProgress, setInstallProgress] = useState('');
@@ -1557,14 +1572,29 @@ const ProjectCreatorModal: React.FC<ProjectCreatorProps> = ({
 
         try {
             // Create the project folder: the main process checks the location and grants access to it
-            const created = await window.electronAPI.fs.createProject(projectPath, projectName);
-            if (!created.success) {
-                throw new Error(created.error || 'Impossible de créer le dossier du projet');
+            const target = `${projectPath}/${projectName}`;
+            let fullProjectPath: string;
+            if (createdProject?.target === target) {
+                fullProjectPath = createdProject.path;
+            } else {
+                const created = await window.electronAPI.fs.createProject(projectPath, projectName);
+                if (!created.success) {
+                    throw new Error(created.error || 'Impossible de créer le dossier du projet');
+                }
+                fullProjectPath = created.path;
+                setCreatedProject({ target, path: fullProjectPath });
             }
-            const fullProjectPath: string = created.path;
 
-            // If framework requires installation, DON'T create files before (Composer needs empty dir)
+            const writeTemplateFiles = async () => {
+                for (const file of selectedTemplate.files) {
+                    await writeProjectFile(`${fullProjectPath}/${file.path}`, file.content);
+                }
+            };
+
             if (selectedTemplate.requiresInstall && selectedTemplate.installCommand) {
+                if (selectedTemplate.installNeedsFiles) {
+                    await writeTemplateFiles();
+                }
                 // Switch to installation step
                 setStep('installing');
                 setInstallOutput([]);
@@ -1583,11 +1613,10 @@ const ProjectCreatorModal: React.FC<ProjectCreatorProps> = ({
                     });
 
                     if (result.success) {
-                        // Now create template files AFTER successful installation
+                        // Scaffolded projects get the template files once the folder is filled
                         setInstallProgress('Adding configuration files...');
-                        for (const file of selectedTemplate.files) {
-                            const filePath = `${fullProjectPath}/${file.path}`;
-                            await writeProjectFile(filePath, file.content);
+                        if (!selectedTemplate.installNeedsFiles) {
+                            await writeTemplateFiles();
                         }
 
                         // Always create/update .docker-ide.json with language info
@@ -1620,10 +1649,7 @@ const ProjectCreatorModal: React.FC<ProjectCreatorProps> = ({
                 }
             } else {
                 // No installation needed, create template files first
-                for (const file of selectedTemplate.files) {
-                    const filePath = `${fullProjectPath}/${file.path}`;
-                    await writeProjectFile(filePath, file.content);
-                }
+                await writeTemplateFiles();
 
                 // Always create .docker-ide.json with language info
                 const dockerIdeConfig = {
@@ -1655,6 +1681,7 @@ const ProjectCreatorModal: React.FC<ProjectCreatorProps> = ({
         setSelectedTemplate(null);
         setProjectPath('');
         setError(null);
+        setCreatedProject(null);
         setInstallOutput([]);
         setInstallProgress('');
         setInstallComplete(false);
