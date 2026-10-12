@@ -32,6 +32,7 @@ export class InteractiveShell extends EventEmitter {
     private isRunning = false;
     private containerId: string | null = null;
     private containerName: string | null = null;
+    private closed = false;
 
     // The client shared with the other managers, looked up on each call
     private get docker(): Docker {
@@ -124,21 +125,14 @@ export class InteractiveShell extends EventEmitter {
                 }
             });
 
-            this.outputStream.on('end', () => {
-                this.emit('message', { type: 'system', data: 'Shell closed' } as ShellMessage);
-                this.emit('close');
-                this.isRunning = false;
-            });
+            this.outputStream.on('end', () => this.markClosed());
 
             this.outputStream.on('error', (err) => {
                 this.emit('message', { type: 'error', data: err.message } as ShellMessage);
             });
 
             // Wait for container to exit
-            this.container.wait().then(() => {
-                this.isRunning = false;
-                this.emit('close');
-            }).catch(() => {
+            this.container.wait().then(() => this.markClosed()).catch(() => {
                 this.isRunning = false;
             });
 
@@ -238,6 +232,15 @@ export class InteractiveShell extends EventEmitter {
             this.container = null;
         }
 
+        this.markClosed();
+    }
+
+    // The stream end, the container exit and stop() all mean the same thing: report it once
+    // (the terminal used to print "Shell closed" up to three times)
+    private markClosed(): void {
+        this.isRunning = false;
+        if (this.closed) return;
+        this.closed = true;
         this.emit('close');
     }
 

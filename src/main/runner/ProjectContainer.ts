@@ -22,6 +22,9 @@ interface ContainerInfo {
     projectPath: string;
 }
 
+// Output kept per stream for one run (about 1 MB of text)
+const MAX_OUTPUT_LENGTH = 1_000_000;
+
 interface ExecResult {
     success: boolean;
     output: string;
@@ -40,6 +43,9 @@ export class ProjectContainerManager extends EventEmitter {
     // Containers being looked up or created, so that two runs started together
     // (F5 and the Run button) share one container instead of both creating it
     private pendingContainers = new Map<string, Promise<ContainerInfo>>();
+    // Runs in progress per container, and containers whose runs the user stopped
+    private runningExecs = new Map<string, number>();
+    private stoppedRuns = new Set<string>();
 
     // Prefix for container names to identify Docker IDE containers
     private static readonly CONTAINER_PREFIX = 'docker-ide-project-';
@@ -313,6 +319,7 @@ export class ProjectContainerManager extends EventEmitter {
         onOutput?: (data: string, type: 'stdout' | 'stderr') => void;
     }): Promise<ExecResult> {
         const startTime = Date.now();
+        const containerName = this.getContainerName(projectPath);
         
         // Get or create the container
         const containerInfo = await this.getOrCreateContainer({
@@ -321,6 +328,7 @@ export class ProjectContainerManager extends EventEmitter {
             language: config?.language,
         });
 
+        this.runningExecs.set(containerName, (this.runningExecs.get(containerName) ?? 0) + 1);
         try {
             const container = this.docker.getContainer(containerInfo.id);
             
@@ -335,19 +343,18 @@ export class ProjectContainerManager extends EventEmitter {
             // Start exec and capture output
             const stream = await exec.start({ hijack: true, stdin: false });
 
-            let stdout = '';
-            let stderr = '';
+            const output = { stdout: '', stderr: '' };
+            const truncated = { stdout: false, stderr: false };
             const collect = (type: 'stdout' | 'stderr') => {
                 // Keeps multi-byte characters split across frames intact
                 const decoder = new StringDecoder('utf8');
                 return new Writable({
                     write(chunk: Buffer, _encoding, callback) {
                         const text = decoder.write(chunk);
-                        if (type === 'stderr') {
-                            stderr += text;
-                        } else {
-                            stdout += text;
-                        }
+                        // A program printing in an endless loop must not fill the memory
+                        const room = MAX_OUTPUT_LENGTH - output[type].length;
+                        if (text.length > room) truncated[type] = true;
+                        if (room > 0) output[type] += text.slice(0, room);
                         if (text) config?.onOutput?.(text, type);
                         callback();
                     },
@@ -361,6 +368,21 @@ export class ProjectContainerManager extends EventEmitter {
                 stream.on('end', () => resolve());
                 stream.on('error', (err) => reject(err));
             });
+
+            const withNote = (type: 'stdout' | 'stderr') =>
+                truncated[type] ? `${output[type]}\n[... sortie tronquée ...]\n` : output[type];
+            const stdout = withNote('stdout');
+            const stderr = withNote('stderr');
+
+            if (this.stoppedRuns.has(containerName)) {
+                return {
+                    success: false,
+                    output: stdout,
+                    error: [stderr.trimEnd(), 'Exécution arrêtée.'].filter(Boolean).join('\n'),
+                    exitCode: 137,
+                    executionTime: Date.now() - startTime,
+                };
+            }
 
             const exitCode = (await this.waitForExitCode(exec)) ?? 0;
 
@@ -380,7 +402,37 @@ export class ProjectContainerManager extends EventEmitter {
                 exitCode: -1,
                 executionTime: Date.now() - startTime,
             };
+        } finally {
+            const remaining = (this.runningExecs.get(containerName) ?? 1) - 1;
+            if (remaining > 0) {
+                this.runningExecs.set(containerName, remaining);
+            } else {
+                this.runningExecs.delete(containerName);
+                this.stoppedRuns.delete(containerName);
+            }
         }
+    }
+
+    /**
+     * Stop what runs in a project's container (e.g. an endless loop). Restarting the
+     * container kills its processes but keeps its files and the tools installed in it.
+     * Returns false if nothing was running.
+     */
+    async stopRun(projectPath: string): Promise<boolean> {
+        const containerName = this.getContainerName(projectPath);
+        const info = this.containers.get(containerName);
+        if (!info || !this.runningExecs.has(containerName)) {
+            return false;
+        }
+
+        this.stoppedRuns.add(containerName);
+        try {
+            await this.docker.getContainer(info.id).restart({ t: 0 });
+        } catch (error) {
+            this.stoppedRuns.delete(containerName);
+            throw error;
+        }
+        return true;
     }
 
     /**

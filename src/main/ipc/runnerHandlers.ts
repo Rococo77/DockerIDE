@@ -51,6 +51,16 @@ export function registerRunnerHandlers(): void {
         }
     });
 
+    // Stop the program running in a project
+    ipcMain.handle('runner:stop', async (_, projectPath: string) => {
+        try {
+            const stopped = await runner.stopRun(await fsManager.resolveAllowedPath(projectPath));
+            return { success: stopped };
+        } catch (error: any) {
+            return { success: false, error: error.message };
+        }
+    });
+
     // Get supported languages
     ipcMain.handle('runner:get-languages', async () => {
         return runner.getSupportedLanguages();

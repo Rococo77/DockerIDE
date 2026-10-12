@@ -34,8 +34,9 @@ export interface FakeDockerOptions {
     images?: string[];
     // Error reported in the middle of every pull, like a network drop
     pullError?: string;
-    // What an exec writes on its stream, chunk by chunk, and its exit code
-    execResult?: (exec: FakeExec) => { chunks: Buffer[]; exitCode: number };
+    // What an exec writes on its stream, chunk by chunk, and its exit code. With `hang`,
+    // the program never ends (until the container is restarted)
+    execResult?: (exec: FakeExec) => { chunks: Buffer[]; exitCode: number; hang?: boolean };
 }
 
 export interface FakeDocker {
@@ -50,6 +51,7 @@ export interface FakeDocker {
 
 export async function startFakeDocker(socketPath: string, options: FakeDockerOptions = {}): Promise<FakeDocker> {
     const sockets = new Set<Socket>();
+    const runningExecs = new Map<FakeExec, Socket>();
     let nextId = 0;
     const fake: FakeDocker = {
         containers: [],
@@ -122,7 +124,7 @@ export async function startFakeDocker(socketPath: string, options: FakeDockerOpt
                 fake.containers.push(container);
                 return json(201, { Id: container.id });
             }
-            if ((match = route.match(/^\/containers\/([^/]+)\/(json|start|stop|wait|resize)$/))) {
+            if ((match = route.match(/^\/containers\/([^/]+)\/(json|start|stop|restart|wait|resize)$/))) {
                 const container = findContainer(match[1]);
                 if (!container) return json(404, { message: `No such container: ${match[1]}` });
                 switch (match[2]) {
@@ -138,6 +140,18 @@ export async function startFakeDocker(socketPath: string, options: FakeDockerOpt
                         return res.end();
                     case 'stop':
                         stopContainer(container);
+                        res.writeHead(204);
+                        return res.end();
+                    case 'restart':
+                        // Kills the programs running in the container
+                        for (const [exec, socket] of runningExecs) {
+                            if (exec.containerId === container.id) {
+                                exec.exitCode = 137;
+                                socket.end();
+                                runningExecs.delete(exec);
+                            }
+                        }
+                        container.running = true;
                         res.writeHead(204);
                         return res.end();
                     case 'wait':
@@ -185,13 +199,15 @@ export async function startFakeDocker(socketPath: string, options: FakeDockerOpt
         const execId = route.match(/^\/exec\/([^/]+)\/start$/)?.[1];
         const exec = fake.execs.find((e) => e.id === execId);
         if (!exec) return socket.end();
-        const { chunks, exitCode } = options.execResult?.(exec) ?? { chunks: [frame(1, 'ok\n')], exitCode: 0 };
+        const { chunks, exitCode, hang } = options.execResult?.(exec) ?? { chunks: [frame(1, 'ok\n')], exitCode: 0 };
         // Each chunk is written separately so that frames can be split across reads
         let index = 0;
         const writeNext = () => {
             if (index < chunks.length) {
                 socket.write(chunks[index++]);
                 setTimeout(writeNext, 5);
+            } else if (hang) {
+                runningExecs.set(exec, socket);
             } else {
                 exec.exitCode = exitCode;
                 socket.end();

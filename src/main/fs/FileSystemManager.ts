@@ -330,6 +330,8 @@ export class FileSystemManager {
         const ext = path.extname(filePath).toLowerCase().slice(1);
         const languageMap: Record<string, string> = {
             'js': 'javascript',
+            'mjs': 'javascript',
+            'cjs': 'javascript',
             'jsx': 'javascript',
             'ts': 'typescript',
             'tsx': 'typescript',

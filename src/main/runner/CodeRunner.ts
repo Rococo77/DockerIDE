@@ -481,6 +481,13 @@ export class CodeRunner {
     }
 
     /**
+     * Stop the program running in a project (e.g. an endless loop)
+     */
+    async stopRun(projectPath: string): Promise<boolean> {
+        return this.projectContainerManager.stopRun(projectPath);
+    }
+
+    /**
      * Stop project container
      */
     async stopProjectContainer(projectPath: string): Promise<void> {

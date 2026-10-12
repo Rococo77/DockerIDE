@@ -175,6 +175,38 @@ printf '#!/bin/sh\\necho ran\\n' > "$out" && chmod +x "$out"
             expect(fake.createCalls).toBe(1);
         });
 
+        it('stops a program that never ends (e.g. an endless loop)', async () => {
+            const fake = await useFakeDocker({
+                images: ['python:3.11-alpine'],
+                execResult: (exec) => exec.cmd.includes('/workspace/loop.py')
+                    ? { chunks: [frame(1, 'still running\n')], exitCode: 0, hang: true }
+                    : { chunks: [frame(1, 'ok\n')], exitCode: 0 },
+            });
+            const runner = CodeRunner.getInstance();
+
+            const running = run('/projects/demo', 'loop.py', 'python');
+            await vi.waitFor(() => expect(fake.execs).toHaveLength(1));
+            expect(await runner.stopRun('/projects/demo')).toBe(true);
+            const result = await running;
+
+            expect(result).toMatchObject({ success: false, output: 'still running\n', exitCode: 137 });
+            expect(result.error).toContain('Exécution arrêtée');
+            // Nothing left to stop, and the next run isn't reported as stopped
+            expect(await runner.stopRun('/projects/demo')).toBe(false);
+            expect(await run('/projects/demo', 'main.py', 'python')).toMatchObject({ success: true, output: 'ok\n' });
+        });
+
+        it('keeps at most about 1 MB of output per run', async () => {
+            const line = `${'x'.repeat(99)}\n`;
+            const chunks = Array.from({ length: 12 }, () => frame(1, line.repeat(1000)));
+            await useFakeDocker({ images: ['python:3.11-alpine'], execResult: () => ({ chunks, exitCode: 0 }) });
+
+            const result = await run('/projects/demo', 'spam.py', 'python');
+
+            expect(result.output.length).toBeLessThan(1_000_100);
+            expect(result.output).toMatch(/sortie tronquée/);
+        });
+
         it('reflects containers stopped or removed outside the IDE', async () => {
             const fake = await useFakeDocker({ images: ['python:3.11-alpine'] });
             const runner = CodeRunner.getInstance();
@@ -219,6 +251,20 @@ printf '#!/bin/sh\\necho ran\\n' > "$out" && chmod +x "$out"
             await vi.waitFor(() => expect(fake.attachInput.toString()).toBe('ls\n'));
             expect(fake.containers[0].config.StdinOnce).toBe(true);
             await shell.stop();
+        });
+
+        it('reports a closed shell once', async () => {
+            await useFakeDocker({ images: ['alpine:latest'] });
+            const shell = new InteractiveShell();
+            const closed = vi.fn();
+            shell.on('close', closed);
+
+            await shell.start({ image: 'alpine:latest' });
+            // stop() ends the stream and removes the container: three ways to notice the end
+            await shell.stop();
+
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            expect(closed).toHaveBeenCalledTimes(1);
         });
     });
 });

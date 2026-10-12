@@ -63,6 +63,8 @@ const api = {
         // Run code in Docker container
         run: (config: { filePath: string; workspacePath: string; language: string }) =>
             ipcRenderer.invoke('runner:run', config),
+        // Stop the program running in a project
+        stop: (workspacePath: string) => ipcRenderer.invoke('runner:stop', workspacePath),
         // Get supported languages
         getLanguages: () => ipcRenderer.invoke('runner:get-languages'),
         // Get language configuration
