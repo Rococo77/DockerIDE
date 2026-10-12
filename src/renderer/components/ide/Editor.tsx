@@ -127,6 +127,9 @@ const Editor: React.FC<EditorProps> = ({
             <div className="editor-main">
                 <MonacoEditor
                     height="100%"
+                    // One model per file: with a single shared model, switching tabs was an
+                    // undoable edit, so Ctrl+Z brought back the previous file's text
+                    path={filePath}
                     language={language}
                     theme="vs-dark"
                     value={content}

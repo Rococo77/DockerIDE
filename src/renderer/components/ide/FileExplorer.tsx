@@ -12,9 +12,26 @@ interface FileExplorerProps {
     onFileSelect: (path: string, language: string) => void;
     selectedFile?: string;
     workspacePath?: string;
-    onWorkspaceChange?: (path: string) => void;
+    // Same as File > Open folder: also closes the previous project's tabs
+    onOpenFolder?: () => void;
     onNewProject?: () => void;
 }
+
+const findNode = (node: FileNode, nodePath: string): FileNode | undefined => {
+    if (node.path === nodePath) return node;
+    for (const child of node.children ?? []) {
+        const found = findNode(child, nodePath);
+        if (found) return found;
+    }
+    return undefined;
+};
+
+// Copy of the tree with the children of `dirPath` set
+const withChildren = (node: FileNode, dirPath: string, children: FileNode[]): FileNode => {
+    if (node.path === dirPath) return { ...node, children };
+    if (!node.children) return node;
+    return { ...node, children: node.children.map((child) => withChildren(child, dirPath, children)) };
+};
 
 const FileIcon: React.FC<{ name: string; type: 'file' | 'directory'; expanded?: boolean }> = ({
     name,
@@ -138,7 +155,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     onFileSelect,
     selectedFile,
     workspacePath,
-    onWorkspaceChange,
+    onOpenFolder,
     onNewProject,
 }) => {
     const [fileTree, setFileTree] = useState<FileNode | null>(null);
@@ -186,15 +203,31 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
         }
     }, [workspacePath, loadDirectory]);
 
+    // Folders deeper than the initial load have no children yet (undefined, not empty)
+    const loadChildren = async (tree: FileNode, dirPath: string): Promise<FileNode> => {
+        const node = findNode(tree, dirPath);
+        if (!node || node.type !== 'directory' || node.children) return tree;
+        const result = await window.electronAPI.fs.readDirectory(dirPath, 1);
+        return result.success && result.files ? withChildren(tree, dirPath, result.files) : tree;
+    };
+
     // Toggle folder expansion
     const toggleFolder = async (path: string) => {
         const newExpanded = new Set(expandedPaths);
         if (newExpanded.has(path)) {
             newExpanded.delete(path);
-        } else {
-            newExpanded.add(path);
+            setExpandedPaths(newExpanded);
+            return;
         }
+        newExpanded.add(path);
         setExpandedPaths(newExpanded);
+        if (fileTree && findNode(fileTree, path)?.children === undefined) {
+            const tree = await loadChildren(fileTree, path);
+            const loaded = findNode(tree, path)?.children;
+            if (loaded) {
+                setFileTree(prev => (prev ? withChildren(prev, path, loaded) : prev));
+            }
+        }
     };
 
     // Handle file selection
@@ -208,22 +241,19 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     };
 
     // Open folder dialog
-    const handleOpenFolder = async () => {
-        try {
-            const result = await window.electronAPI.fs.openFolder();
-            if (result.success && result.path) {
-                onWorkspaceChange?.(result.path);
-            }
-        } catch (err: any) {
-            setError(err.message);
-        }
+    const handleOpenFolder = () => {
+        onOpenFolder?.();
     };
 
     // Refresh file tree
     const handleRefresh = async () => {
         if (workspacePath) {
             setLoading(true);
-            const tree = await loadDirectory(workspacePath);
+            let tree = await loadDirectory(workspacePath);
+            // Reload the open folders that are deeper than the initial load
+            for (const dirPath of expandedPaths) {
+                if (tree) tree = await loadChildren(tree, dirPath);
+            }
             setFileTree(tree);
             setLoading(false);
         }

@@ -31,6 +31,12 @@ const App: React.FC = () => {
 
     // Get the active file
     const activeFile = activeFileIndex >= 0 ? openFiles[activeFileIndex] : null;
+    const activeFilePath = activeFile?.path;
+
+    // Ask before dropping unsaved edits
+    const confirmDiscard = (files: OpenFile[]) =>
+        !files.some(f => f?.isModified) ||
+        window.confirm('Des modifications ne sont pas enregistrées. Les abandonner ?');
 
     // Run code in Docker
     const handleRunCode = async () => {
@@ -72,46 +78,35 @@ const App: React.FC = () => {
                 };
                 setOpenFiles([...openFiles, newFile]);
                 setActiveFileIndex(openFiles.length);
+            } else {
+                addToast(`Impossible d'ouvrir le fichier : ${result.error}`, 'error');
             }
         } catch (err) {
             addToast('Erreur lors du chargement du fichier', 'error');
         }
     };
 
-    // Update file content
+    // Update file content. Files are found by path, not by tab index: tabs can be closed
+    // in the meantime (an outdated index used to write into the wrong entry)
     const handleContentChange = useCallback((content: string) => {
-        if (activeFileIndex >= 0) {
-            setOpenFiles(prev => {
-                const updated = [...prev];
-                updated[activeFileIndex] = {
-                    ...updated[activeFileIndex],
-                    content,
-                    isModified: true,
-                };
-                return updated;
-            });
-        }
-    }, [activeFileIndex]);
+        if (!activeFilePath) return;
+        setOpenFiles(prev => prev.map(f => (f.path === activeFilePath ? { ...f, content, isModified: true } : f)));
+    }, [activeFilePath]);
 
     // Save file
     const handleSaveFile = async () => {
-        if (!activeFile || !activeFile.isModified) return;
+        const file = activeFile;
+        if (!file || !file.isModified) return;
 
         try {
-            const result = await window.electronAPI.fs.writeFile(
-                activeFile.path,
-                activeFile.content
-            );
+            const result = await window.electronAPI.fs.writeFile(file.path, file.content);
             if (result.success) {
-                setOpenFiles(prev => {
-                    const updated = [...prev];
-                    updated[activeFileIndex] = {
-                        ...updated[activeFileIndex],
-                        isModified: false,
-                    };
-                    return updated;
-                });
+                // Edits typed while saving keep the file marked as modified
+                setOpenFiles(prev => prev.map(f =>
+                    (f.path === file.path && f.content === file.content ? { ...f, isModified: false } : f)));
                 addToast('Fichier sauvegardé', 'success');
+            } else {
+                addToast(`Erreur lors de la sauvegarde : ${result.error}`, 'error');
             }
         } catch (err) {
             addToast('Erreur lors de la sauvegarde', 'error');
@@ -120,6 +115,7 @@ const App: React.FC = () => {
 
     // Close a file tab
     const handleCloseFile = (index: number) => {
+        if (!confirmDiscard([openFiles[index]])) return;
         const newOpenFiles = openFiles.filter((_, i) => i !== index);
         setOpenFiles(newOpenFiles);
         
@@ -138,8 +134,12 @@ const App: React.FC = () => {
 
     // Handle new project creation
     const handleProjectCreated = (projectPath: string) => {
-        setWorkspacePath(projectPath);
         setShowProjectCreator(false);
+        if (!confirmDiscard(openFiles)) {
+            addToast(`Projet créé dans ${projectPath}`, 'info');
+            return;
+        }
+        setWorkspacePath(projectPath);
         setActiveTab('files');
         setOpenFiles([]);
         setActiveFileIndex(-1);
@@ -147,6 +147,7 @@ const App: React.FC = () => {
 
     // Handle open folder
     const handleOpenFolder = async () => {
+        if (!confirmDiscard(openFiles)) return;
         try {
             const result = await window.electronAPI.fs.openFolder();
             if (result.success && result.path) {
@@ -170,25 +171,29 @@ const App: React.FC = () => {
         if (workspacePath && terminalRef.current) {
             // Small delay to ensure terminal is ready
             const timer = setTimeout(() => {
-                if (!terminalRef.current?.isShellActive()) {
-                    setTerminalVisible(true);
-                    terminalRef.current?.connectToProject();
-                }
+                setTerminalVisible(true);
+                // Replaces a shell of the previous project (no-op if already connected here)
+                terminalRef.current?.connectToProject();
             }, 500);
             return () => clearTimeout(timer);
         }
     }, [workspacePath]);
+
+    // The keyboard listener is added once and calls the latest handlers through this ref:
+    // with handlers from an older render, Ctrl+S saved into the wrong tab
+    const shortcutsRef = useRef({ save: handleSaveFile, run: handleRunCode, openFolder: handleOpenFolder });
+    shortcutsRef.current = { save: handleSaveFile, run: handleRunCode, openFolder: handleOpenFolder };
 
     // Keyboard shortcuts
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if ((e.ctrlKey || e.metaKey) && e.key === 's') {
                 e.preventDefault();
-                handleSaveFile();
+                shortcutsRef.current.save();
             }
             if (e.key === 'F5') {
                 e.preventDefault();
-                handleRunCode();
+                shortcutsRef.current.run();
             }
             // Ctrl+Shift+N = Nouveau Projet
             if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'N') {
@@ -198,12 +203,12 @@ const App: React.FC = () => {
             // Ctrl+O = Ouvrir Dossier
             if ((e.ctrlKey || e.metaKey) && e.key === 'o') {
                 e.preventDefault();
-                handleOpenFolder();
+                shortcutsRef.current.openFolder();
             }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [activeFile, workspacePath]);
+    }, []);
 
     const renderSidePanel = () => {
         switch (activeTab) {
@@ -213,7 +218,7 @@ const App: React.FC = () => {
                         onFileSelect={handleFileSelect}
                         selectedFile={activeFile?.path}
                         workspacePath={workspacePath}
-                        onWorkspaceChange={setWorkspacePath}
+                        onOpenFolder={handleOpenFolder}
                         onNewProject={() => setShowProjectCreator(true)}
                     />
                 );
