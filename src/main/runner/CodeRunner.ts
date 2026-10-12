@@ -2,6 +2,7 @@ import { ContainerManager } from '../docker/ContainerManager';
 import { ImageManager } from '../docker/ImageManager';
 import { FileSystemManager } from '../fs/FileSystemManager';
 import { ProjectContainerManager } from './ProjectContainer';
+import { LANGUAGE_IMAGES, dependencyEnvScript, getProjectEnvironment, withDependencies } from './ProjectEnvironment';
 import * as path from 'path';
 import log from '../logger';
 
@@ -32,7 +33,7 @@ const LANGUAGE_CONFIGS: Record<string, {
     dockerfile?: (entryFile: string) => string;
 }> = {
     python: {
-        image: 'python:3.11-alpine',
+        image: LANGUAGE_IMAGES.python,
         command: (file) => ['python', file],
         fileExtensions: ['py'],
         dockerfile: (entry) => `FROM python:3.11-alpine AS base
@@ -43,7 +44,7 @@ COPY . .
 CMD ["python", "${entry}"]`,
     },
     javascript: {
-        image: 'node:20-alpine',
+        image: LANGUAGE_IMAGES.javascript,
         command: (file) => ['node', file],
         fileExtensions: ['js', 'mjs'],
         dockerfile: (entry) => `FROM node:20-alpine
@@ -54,7 +55,7 @@ COPY . .
 CMD ["node", "${entry}"]`,
     },
     typescript: {
-        image: 'node:20-alpine',
+        image: LANGUAGE_IMAGES.typescript,
         command: (file) => ['npx', 'ts-node', file],
         fileExtensions: ['ts'],
         dockerfile: (entry) => `FROM node:20-alpine AS build
@@ -72,7 +73,7 @@ RUN npm ci --production
 CMD ["node", "dist/${entry.replace('.ts', '.js')}"]`,
     },
     java: {
-        image: 'eclipse-temurin:17-jdk-alpine',
+        image: LANGUAGE_IMAGES.java,
         command: (file) => {
             const className = path.basename(file, '.java');
             return ['sh', '-c', 'javac "$1" && java -cp "$(dirname "$1")" "$2"', 'sh', file, className];
@@ -92,7 +93,7 @@ CMD ["java", "${className}"]`;
         },
     },
     go: {
-        image: 'golang:1.22-alpine',
+        image: LANGUAGE_IMAGES.go,
         command: (file) => ['go', 'run', file],
         fileExtensions: ['go'],
         dockerfile: (entry) => `FROM golang:1.22-alpine AS build
@@ -107,7 +108,7 @@ COPY --from=build /app/main /main
 ENTRYPOINT ["/main"]`,
     },
     rust: {
-        image: 'rust:1.75-alpine',
+        image: LANGUAGE_IMAGES.rust,
         command: (file) => {
             const outputName = path.basename(file, '.rs');
             return ['sh', '-c', 'rustc "$1" -o "/tmp/$2" && "/tmp/$2"', 'sh', file, outputName];
@@ -124,7 +125,7 @@ COPY --from=build /app/target/release/* /app/main* /usr/local/bin/
 ENTRYPOINT ["main"]`,
     },
     ruby: {
-        image: 'ruby:3.2-alpine',
+        image: LANGUAGE_IMAGES.ruby,
         command: (file) => ['ruby', file],
         fileExtensions: ['rb'],
         dockerfile: (entry) => `FROM ruby:3.2-alpine
@@ -135,7 +136,7 @@ COPY . .
 CMD ["ruby", "${entry}"]`,
     },
     php: {
-        image: 'php:8.2-cli-alpine',
+        image: LANGUAGE_IMAGES.php,
         command: (file) => ['php', file],
         fileExtensions: ['php'],
         dockerfile: (entry) => `FROM php:8.2-cli-alpine
@@ -144,7 +145,7 @@ COPY . .
 CMD ["php", "${entry}"]`,
     },
     c: {
-        image: 'alpine:3.19',
+        image: LANGUAGE_IMAGES.c,
         command: (file) => {
             const outputName = path.basename(file, '.c');
             return ['sh', '-c', 'gcc "$1" -o "/tmp/$2" -static && "/tmp/$2"', 'sh', file, outputName];
@@ -164,7 +165,7 @@ ENTRYPOINT ["/${outputName}"]`;
         },
     },
     cpp: {
-        image: 'alpine:3.19',
+        image: LANGUAGE_IMAGES.cpp,
         command: (file) => {
             const outputName = path.basename(file, '.cpp');
             return ['sh', '-c', 'g++ "$1" -o "/tmp/$2" -static && "/tmp/$2"', 'sh', file, outputName];
@@ -183,6 +184,12 @@ COPY --from=build /app/${outputName} /${outputName}
 ENTRYPOINT ["/${outputName}"]`;
         },
     },
+};
+
+// JavaScript and TypeScript files run in the same (Node) environment
+const sameRuntime = (projectLanguage: string | undefined, language: string) => {
+    const runtime = (lang?: string) => (lang === 'typescript' ? 'javascript' : lang);
+    return !!projectLanguage && runtime(projectLanguage) === runtime(language);
 };
 
 export class CodeRunner {
@@ -264,14 +271,19 @@ export class CodeRunner {
         const startTime = Date.now();
 
         try {
+            // Files in the project's language run in the project's image, like its terminal and
+            // its installation, so that they all see the same dependencies
+            const environment = await getProjectEnvironment(workspacePath);
+            const image = sameRuntime(environment.language, language) ? environment.image : langConfig.image;
+
             // Ensure image is available
-            onProgress?.(`Vérification de l'image ${langConfig.image}...`);
-            const imageReady = await this.ensureImage(langConfig.image, onProgress);
+            onProgress?.(`Vérification de l'image ${image}...`);
+            const imageReady = await this.ensureImage(image, onProgress);
             if (!imageReady) {
                 return {
                     success: false,
                     output: '',
-                    error: `Impossible de télécharger l'image ${langConfig.image}`,
+                    error: `Impossible de télécharger l'image ${image}`,
                 };
             }
 
@@ -279,8 +291,8 @@ export class CodeRunner {
             const relativePath = path.relative(workspacePath, filePath).replace(/\\/g, '/');
             const containerFilePath = `/workspace/${relativePath}`;
 
-            // Get command for the language
-            const command = langConfig.command(containerFilePath);
+            // Get command for the language, run with the project's dependencies
+            const command = withDependencies(image, langConfig.command(containerFilePath));
             
             // Check if container already exists for this project
             const existingContainer = this.projectContainerManager.getContainerInfo(workspacePath);
@@ -296,7 +308,7 @@ export class CodeRunner {
                 workspacePath,
                 command,
                 {
-                    image: langConfig.image,
+                    image,
                     language,
                     onOutput: (data, type) => {
                         // Could stream output here if needed
@@ -375,7 +387,8 @@ export class CodeRunner {
             const containerConfig = {
                 Image: image,
                 name: containerName,
-                Cmd: ['sh', '-c', installCommand],
+                // Dependencies go in the project folder (see dependencyEnvScript)
+                Cmd: ['sh', '-c', `${dependencyEnvScript(image, true)}${installCommand}`],
                 WorkingDir: '/workspace',
                 HostConfig: {
                     Binds: [`${projectPath}:/workspace:rw`],

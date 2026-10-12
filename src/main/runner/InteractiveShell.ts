@@ -4,11 +4,16 @@ import * as path from 'path';
 import { DockerManager } from '../docker/DockerManager';
 import { ImageManager } from '../docker/ImageManager';
 import log from '../logger';
+import { withDependencies } from './ProjectEnvironment';
 
 interface ShellConfig {
     image: string;
     workspacePath?: string;
     language?: string;
+    // The project's terminal: a shell (not a language REPL) with the project's dependencies
+    project?: boolean;
+    // Ports of the project's server, published on this machine
+    ports?: number[];
 }
 
 interface ShellMessage {
@@ -33,6 +38,7 @@ export class InteractiveShell extends EventEmitter {
     private containerId: string | null = null;
     private containerName: string | null = null;
     private closed = false;
+    private publishedPorts: number[] = [];
 
     // The client shared with the other managers, looked up on each call
     private get docker(): Docker {
@@ -44,7 +50,7 @@ export class InteractiveShell extends EventEmitter {
      */
     async start(config: ShellConfig): Promise<boolean> {
         try {
-            const shellConfig = config.language 
+            const shellConfig = config.language && !config.project
                 ? LANGUAGE_SHELLS[config.language] || LANGUAGE_SHELLS.default
                 : LANGUAGE_SHELLS.default;
 
@@ -70,34 +76,59 @@ export class InteractiveShell extends EventEmitter {
             const projectName = config.workspacePath 
                 ? path.basename(config.workspacePath).toLowerCase().replace(/[^a-z0-9-]/g, '-')
                 : 'shell';
-            const containerName = `docker-ide-${projectName}-${Date.now()}`;
-            const hostConfig: Docker.HostConfig = {
-                AutoRemove: true,
+            // With the project mounted, the shell sees its dependencies (Python virtualenv,
+            // Ruby gems); the project terminal creates the virtualenv if needed
+            const cmd = config.workspacePath
+                ? withDependencies(imageName, shellConfig.shell, config.project)
+                : shellConfig.shell;
+            const createShellContainer = (ports: number[]) => {
+                const containerName = `docker-ide-${projectName}-${Date.now()}`;
+                this.containerName = containerName;
+                return this.docker.createContainer({
+                    Image: imageName,
+                    name: containerName,
+                    Cmd: cmd,
+                    WorkingDir: config.workspacePath ? '/workspace' : '/',
+                    Tty: true,
+                    OpenStdin: true,
+                    // Close stdin when the IDE detaches (app closed or crashed): the shell then
+                    // exits and AutoRemove deletes the container instead of leaving it running
+                    StdinOnce: true,
+                    ExposedPorts: Object.fromEntries(ports.map((port) => [`${port}/tcp`, {}])),
+                    HostConfig: {
+                        AutoRemove: true,
+                        Binds: config.workspacePath ? [`${config.workspacePath}:/workspace`] : undefined,
+                        // So that the server started in the terminal opens in the browser. Bound
+                        // to this machine only: it isn't exposed to the network.
+                        PortBindings: Object.fromEntries(ports.map((port) => [
+                            `${port}/tcp`, [{ HostIp: '127.0.0.1', HostPort: String(port) }],
+                        ])),
+                    },
+                });
             };
 
-            // Mount workspace if provided
-            if (config.workspacePath) {
-                hostConfig.Binds = [`${config.workspacePath}:/workspace`];
-            }
-
-            this.container = await this.docker.createContainer({
-                Image: imageName,
-                name: containerName,
-                Cmd: shellConfig.shell,
-                WorkingDir: config.workspacePath ? '/workspace' : '/',
-                Tty: true,
-                OpenStdin: true,
-                // Close stdin when the IDE detaches (app closed or crashed): the shell then
-                // exits and AutoRemove deletes the container instead of leaving it running
-                StdinOnce: true,
-                HostConfig: hostConfig,
-            });
-
+            const ports = config.ports ?? [];
+            this.container = await createShellContainer(ports);
             this.containerId = this.container.id;
-            this.containerName = containerName;
 
             // Start container
-            await this.container.start();
+            try {
+                await this.container.start();
+                this.publishedPorts = ports;
+            } catch (error) {
+                if (ports.length === 0) throw error;
+                // Usually a port already used on this machine (another server, another
+                // project's terminal): start the shell anyway, without publishing them
+                await this.container.remove({ force: true }).catch((): void => undefined);
+                this.container = await createShellContainer([]);
+                this.containerId = this.container.id;
+                await this.container.start();
+                this.publishedPorts = [];
+                this.emit('message', {
+                    type: 'system',
+                    data: `Port ${ports.join(', ')} unavailable on this computer: the project's server won't open in the browser.`,
+                } as ShellMessage);
+            }
             this.isRunning = true;
 
             // Attach to container
@@ -249,6 +280,13 @@ export class InteractiveShell extends EventEmitter {
      */
     isActive(): boolean {
         return this.isRunning;
+    }
+
+    /**
+     * Ports of the project's server published on this machine
+     */
+    getPublishedPorts(): number[] {
+        return this.publishedPorts;
     }
 
     /**

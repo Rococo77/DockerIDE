@@ -100,6 +100,16 @@ npm run make
 - Le terminal est connecté au conteneur
 - Installation de dépendances via Docker
 
+L'environnement d'un projet est décrit par son fichier `.docker-ide.json` (image Docker, commande de démarrage, ports). L'installation du template, le terminal et l'exécution (F5) utilisent tous cette même image. Les conteneurs sont jetables : les dépendances sont donc rangées dans le dossier du projet, seul élément qu'ils partagent :
+
+| Langage | Dépendances |
+|---|---|
+| Python | environnement virtuel `.venv`, créé et activé automatiquement |
+| Ruby | gems dans `.gems` |
+| Node.js, PHP | `node_modules`, `vendor` (comme d'habitude) |
+
+Pensez à ajouter `.venv/` et `.gems/` au `.gitignore`. Le port du serveur d'un template est publié sur la machine (en local uniquement) : le terminal indique la commande pour lancer le serveur et l'adresse à ouvrir, par exemple `http://localhost:3000`.
+
 ### 3. Gérer les Environnements
 - Accéder au Marketplace pour installer de nouvelles images
 - Voir les images installées

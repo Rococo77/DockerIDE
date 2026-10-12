@@ -3,6 +3,7 @@ import { CodeRunner } from '../runner/CodeRunner';
 import { ShellManager } from '../runner/InteractiveShell';
 import { ComposeManager } from '../docker/ComposeManager';
 import { FileSystemManager } from '../fs/FileSystemManager';
+import { getProjectEnvironment } from '../runner/ProjectEnvironment';
 import log from '../logger';
 
 // Sends events to the window that made the request, if it still exists: on macOS the app
@@ -114,11 +115,16 @@ export function registerRunnerHandlers(): void {
         image?: string;
         language?: string;
         workspacePath?: string;
+        // The project's terminal: its image and ports come from the project, not the renderer
+        project?: boolean;
     }) => {
         try {
             const send = replyTo(event.sender);
             const workspacePath = config.workspacePath
                 ? await fsManager.resolveAllowedPath(config.workspacePath)
+                : undefined;
+            const environment = config.project && workspacePath
+                ? await getProjectEnvironment(workspacePath)
                 : undefined;
 
             // Check if shell already exists
@@ -146,12 +152,17 @@ export function registerRunnerHandlers(): void {
 
             // Start the shell
             const started = await shell.start({
-                image: config.image,
+                image: environment?.image ?? config.image,
                 language: config.language,
                 workspacePath,
+                project: !!environment,
+                ports: environment?.ports,
             });
 
-            return { success: started };
+            return {
+                success: started,
+                environment: environment && { ...environment, ports: shell.getPublishedPorts() },
+            };
         } catch (error: any) {
             return { success: false, error: error.message };
         }

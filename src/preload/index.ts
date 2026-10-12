@@ -110,7 +110,8 @@ const api = {
     },
     shell: {
         // Start an interactive shell
-        start: (config: { shellId: string; image?: string; language?: string; workspacePath?: string }) =>
+        // `project: true` opens the project's terminal, in the project's environment
+        start: (config: { shellId: string; image?: string; language?: string; workspacePath?: string; project?: boolean }) =>
             ipcRenderer.invoke('shell:start', config),
         // Send input to shell
         write: (shellId: string, data: string) =>

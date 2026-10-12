@@ -40,6 +40,8 @@ export interface FakeDockerOptions {
     execResult?: (exec: FakeExec) => { chunks: Buffer[]; exitCode: number; hang?: boolean };
     // How long one-shot (auto-removed) containers "run" before exiting; 0 = right away
     oneShotRunTime?: number;
+    // Ports already used on the host: starting a container that publishes them fails
+    busyPorts?: number[];
 }
 
 export interface FakeDocker {
@@ -163,8 +165,13 @@ export async function startFakeDocker(socketPath: string, options: FakeDockerOpt
                             Config: { Image: container.image, Labels: container.labels },
                         });
                     case 'start': {
-                        container.running = true;
                         const host = container.config.HostConfig ?? {};
+                        const published = Object.values(host.PortBindings ?? {}).flat() as { HostPort: string }[];
+                        const busy = published.find((binding) => options.busyPorts?.includes(Number(binding.HostPort)));
+                        if (busy) {
+                            return json(500, { message: `Bind for 127.0.0.1:${busy.HostPort} failed: port is already allocated` });
+                        }
+                        container.running = true;
                         if (host.AutoRemove && !container.config.OpenStdin) {
                             // One-shot container (framework setup): its command "runs", then it exits
                             const source = (host.Binds?.[0] ?? '').split(':')[0];

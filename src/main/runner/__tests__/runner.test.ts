@@ -15,6 +15,7 @@ import { ImageManager } from '../../docker/ImageManager';
 import { CodeRunner } from '../CodeRunner';
 import { ProjectContainerManager } from '../ProjectContainer';
 import { InteractiveShell } from '../InteractiveShell';
+import { LANGUAGE_IMAGES } from '../ProjectEnvironment';
 
 // The fake Docker daemon listens on a unix socket
 describe.skipIf(process.platform === 'win32')('code runner and shells (fake Docker daemon)', () => {
@@ -59,11 +60,12 @@ describe.skipIf(process.platform === 'win32')('code runner and shells (fake Dock
         });
 
         it('passes a file name with spaces as a single argument', async () => {
-            const fake = await useFakeDocker({ images: ['python:3.11-alpine'] });
+            const fake = await useFakeDocker({ images: [LANGUAGE_IMAGES.python] });
 
             await run('/projects/demo', 'mon fichier.py', 'python');
 
-            expect(fake.execs[0].cmd).toEqual(['python', '/workspace/mon fichier.py']);
+            // Run with the project's dependencies, the file still being a single argument
+            expect(fake.execs[0].cmd.slice(-2)).toEqual(['python', '/workspace/mon fichier.py']);
         });
 
         it('keeps spaces and quotes in file names when the commands run in a real shell', () => {
@@ -128,7 +130,7 @@ printf '#!/bin/sh\\necho ran\\n' > "$out" && chmod +x "$out"
             // Cut inside a header, inside a payload and inside a multi-byte character
             const cuts = [3, 11, 20, output.indexOf(Buffer.from('ö')) + 1, output.length];
             const chunks = cuts.map((end, i) => output.subarray(i === 0 ? 0 : cuts[i - 1], end));
-            await useFakeDocker({ images: ['python:3.11-alpine'], execResult: () => ({ chunks, exitCode: 0 }) });
+            await useFakeDocker({ images: [LANGUAGE_IMAGES.python], execResult: () => ({ chunks, exitCode: 0 }) });
 
             const result = await run('/projects/demo', 'main.py', 'python');
 
@@ -137,7 +139,7 @@ printf '#!/bin/sh\\necho ran\\n' > "$out" && chmod +x "$out"
         });
 
         it('gives projects with the same folder name their own container', async () => {
-            const fake = await useFakeDocker({ images: ['python:3.11-alpine'] });
+            const fake = await useFakeDocker({ images: [LANGUAGE_IMAGES.python] });
 
             await run('/home/me/cours/tp1', 'main.py', 'python');
             await run('/home/me/perso/tp1', 'main.py', 'python');
@@ -150,10 +152,10 @@ printf '#!/bin/sh\\necho ran\\n' > "$out" && chmod +x "$out"
         });
 
         it('does not reuse a container whose name only starts with the project one', async () => {
-            const fake = await useFakeDocker({ images: ['python:3.11-alpine'] });
+            const fake = await useFakeDocker({ images: [LANGUAGE_IMAGES.python] });
             const name = (ProjectContainerManager.getInstance() as any).getContainerName('/projects/tp1');
             fake.containers.push({
-                id: 'other', name: `${name}0`, image: 'python:3.11-alpine', running: true,
+                id: 'other', name: `${name}0`, image: LANGUAGE_IMAGES.python, running: true,
                 labels: {}, config: { HostConfig: { Binds: ['/projects/tp10:/workspace'] } }, waiting: [],
             });
 
@@ -164,7 +166,7 @@ printf '#!/bin/sh\\necho ran\\n' > "$out" && chmod +x "$out"
         });
 
         it('creates a single container when two runs start together', async () => {
-            const fake = await useFakeDocker({ images: ['python:3.11-alpine'] });
+            const fake = await useFakeDocker({ images: [LANGUAGE_IMAGES.python] });
 
             const results = await Promise.all([
                 run('/projects/demo', 'a.py', 'python'),
@@ -177,7 +179,7 @@ printf '#!/bin/sh\\necho ran\\n' > "$out" && chmod +x "$out"
 
         it('stops a program that never ends (e.g. an endless loop)', async () => {
             const fake = await useFakeDocker({
-                images: ['python:3.11-alpine'],
+                images: [LANGUAGE_IMAGES.python],
                 execResult: (exec) => exec.cmd.includes('/workspace/loop.py')
                     ? { chunks: [frame(1, 'still running\n')], exitCode: 0, hang: true }
                     : { chunks: [frame(1, 'ok\n')], exitCode: 0 },
@@ -199,7 +201,7 @@ printf '#!/bin/sh\\necho ran\\n' > "$out" && chmod +x "$out"
         it('keeps at most about 1 MB of output per run', async () => {
             const line = `${'x'.repeat(99)}\n`;
             const chunks = Array.from({ length: 12 }, () => frame(1, line.repeat(1000)));
-            await useFakeDocker({ images: ['python:3.11-alpine'], execResult: () => ({ chunks, exitCode: 0 }) });
+            await useFakeDocker({ images: [LANGUAGE_IMAGES.python], execResult: () => ({ chunks, exitCode: 0 }) });
 
             const result = await run('/projects/demo', 'spam.py', 'python');
 
@@ -208,7 +210,7 @@ printf '#!/bin/sh\\necho ran\\n' > "$out" && chmod +x "$out"
         });
 
         it('reflects containers stopped or removed outside the IDE', async () => {
-            const fake = await useFakeDocker({ images: ['python:3.11-alpine'] });
+            const fake = await useFakeDocker({ images: [LANGUAGE_IMAGES.python] });
             const runner = CodeRunner.getInstance();
             await run('/projects/demo', 'main.py', 'python');
             expect((await runner.getProjectContainerInfo('/projects/demo'))?.status).toBe('running');
@@ -221,7 +223,43 @@ printf '#!/bin/sh\\necho ran\\n' > "$out" && chmod +x "$out"
         });
     });
 
+    describe('project environment', () => {
+        const writeConfig = (config: unknown) =>
+            fs.writeFileSync(path.join(tmpDir, '.docker-ide.json'), JSON.stringify(config));
+
+        it("runs files in the project's language in the project's image", async () => {
+            writeConfig({ language: 'python', image: 'python:3.12-slim' });
+            const fake = await useFakeDocker({ images: ['python:3.12-slim'] });
+
+            await run(tmpDir, 'main.py', 'python');
+
+            expect(fake.containers.map((c) => c.image)).toEqual(['python:3.12-slim']);
+        });
+
+        it('runs files in another language in their own image', async () => {
+            writeConfig({ language: 'python', image: 'python:3.12-slim' });
+            const fake = await useFakeDocker({ images: [LANGUAGE_IMAGES.javascript] });
+
+            await run(tmpDir, 'tool.js', 'javascript');
+
+            expect(fake.containers.map((c) => c.image)).toEqual([LANGUAGE_IMAGES.javascript]);
+        });
+    });
+
     describe('framework setup', () => {
+        it('installs Python dependencies in a virtualenv inside the project', async () => {
+            const fake = await useFakeDocker({ images: [LANGUAGE_IMAGES.python] });
+
+            await CodeRunner.getInstance().runFrameworkSetup({
+                projectPath: '/projects/api', image: LANGUAGE_IMAGES.python, installCommand: 'pip install -r requirements.txt',
+            });
+
+            const script = fake.oneShotRuns[0].cmd[2];
+            expect(script).toContain('python -m venv --copies /workspace/.venv');
+            expect(script).toContain('. /workspace/.venv/bin/activate');
+            expect(script.endsWith('pip install -r requirements.txt')).toBe(true);
+        });
+
         it('gets the result of an install command that exits right away', async () => {
             // The container is auto-removed as soon as it exits: waiting only after
             // start() used to find no container
@@ -248,10 +286,10 @@ printf '#!/bin/sh\\necho ran\\n' > "$out" && chmod +x "$out"
         it('reports a pull that fails midway', async () => {
             await useFakeDocker({ pullError: 'no space left on device' });
 
-            await expect(ImageManager.getInstance().pullImage('python:3.11-alpine')).rejects.toThrow('no space left on device');
+            await expect(ImageManager.getInstance().pullImage(LANGUAGE_IMAGES.python)).rejects.toThrow('no space left on device');
             const result = await run('/projects/demo', 'main.py', 'python');
             expect(result.success).toBe(false);
-            expect(result.error).toContain('python:3.11-alpine');
+            expect(result.error).toContain(LANGUAGE_IMAGES.python);
         });
     });
 
@@ -265,6 +303,36 @@ printf '#!/bin/sh\\necho ran\\n' > "$out" && chmod +x "$out"
 
             await vi.waitFor(() => expect(fake.attachInput.toString()).toBe('ls\n'));
             expect(fake.containers[0].config.StdinOnce).toBe(true);
+            await shell.stop();
+        });
+
+        it("opens the project's terminal as a shell with its dependencies and server ports", async () => {
+            const fake = await useFakeDocker({ images: [LANGUAGE_IMAGES.python] });
+            const shell = new InteractiveShell();
+
+            await shell.start({ image: LANGUAGE_IMAGES.python, language: 'python', workspacePath: '/projects/demo', project: true, ports: [5000] });
+
+            const config = fake.containers[0].config;
+            // A shell, not the Python REPL, with the virtualenv created and activated
+            expect(config.Cmd.slice(-1)).toEqual(['/bin/sh']);
+            expect(config.Cmd[2]).toContain('python -m venv --copies /workspace/.venv');
+            expect(config.HostConfig.PortBindings).toEqual({ '5000/tcp': [{ HostIp: '127.0.0.1', HostPort: '5000' }] });
+            expect(shell.getPublishedPorts()).toEqual([5000]);
+            await shell.stop();
+        });
+
+        it('opens the terminal without the ports when they are already used', async () => {
+            const fake = await useFakeDocker({ images: [LANGUAGE_IMAGES.python], busyPorts: [5000] });
+            const shell = new InteractiveShell();
+            const messages: string[] = [];
+            shell.on('message', (message: { data: string }) => messages.push(message.data));
+
+            expect(await shell.start({ image: LANGUAGE_IMAGES.python, workspacePath: '/projects/demo', project: true, ports: [5000] })).toBe(true);
+
+            expect(shell.getPublishedPorts()).toEqual([]);
+            expect(fake.containers).toHaveLength(1);
+            expect(fake.containers[0].config.HostConfig.PortBindings).toEqual({});
+            expect(messages.some((m) => m.includes('5000'))).toBe(true);
             await shell.stop();
         });
 

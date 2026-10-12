@@ -69,54 +69,33 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ visible, onClose, 
         setLines([
             { type: 'system', content: 'Docker IDE Terminal' },
             { type: 'system', content: `Project: ${workspacePath}` },
-            { type: 'system', content: 'Detecting configuration...' },
+            { type: 'system', content: 'Starting the project\'s container...' },
         ]);
 
         try {
-            let projectImage = 'alpine:latest';
-            let projectLanguage = 'bash';
-
-            try {
-                const configPath = `${workspacePath}/.docker-ide.json`;
-                const configResult = await window.electronAPI.fs.readFile(configPath);
-                if (configResult.success && configResult.content) {
-                    const config = JSON.parse(configResult.content);
-                    if (config.image) projectImage = config.image;
-                    if (config.language) projectLanguage = config.language;
-                    if (config.framework) {
-                        appendLines([{
-                            type: 'system',
-                            content: `Framework: ${config.framework}`
-                        }]);
-                    }
-                }
-            } catch {
-                appendLines([{
-                    type: 'system',
-                    content: 'No .docker-ide.json found, using default image'
-                }]);
-            }
-
-            appendLines([{
-                type: 'system',
-                content: `Image: ${projectImage}`
-            }]);
-
+            // The main process sets up the project's environment: its image, its
+            // dependencies (Python virtualenv, Ruby gems) and its server's ports
             const result = await window.electronAPI.shell.start({
                 shellId: newShellId,
-                image: projectImage,
-                language: projectLanguage,
                 workspacePath,
+                project: true,
             });
 
             if (result.success) {
                 shellWorkspaceRef.current = workspacePath;
                 setShellActive(true);
                 setActiveTab('shell');
-                appendLines([{
-                    type: 'success',
-                    content: 'Connected to Docker container'
-                }]);
+                const environment = result.environment;
+                appendLines([
+                    { type: 'success', content: `Connected to Docker container (${environment?.image})` },
+                    ...(environment?.startCommand
+                        ? [{ type: 'system' as const, content: `Start the server: ${environment.startCommand}` }]
+                        : []),
+                    ...(environment?.ports ?? []).map((port: number): TerminalLine => ({
+                        type: 'system',
+                        content: `Then open http://localhost:${port}`,
+                    })),
+                ]);
             } else {
                 appendLines([{
                     type: 'error',

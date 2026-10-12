@@ -1482,6 +1482,16 @@ server.listen(3000, '0.0.0.0', () => {
     },
 ];
 
+// Contents of a template's .docker-ide.json ({} if it has none)
+const parseConfig = (content?: string): Record<string, any> => {
+    try {
+        const config = content ? JSON.parse(content) : {};
+        return config && typeof config === 'object' ? config : {};
+    } catch {
+        return {};
+    }
+};
+
 const ProjectCreatorModal: React.FC<ProjectCreatorProps> = ({
     isOpen,
     onClose,
@@ -1591,6 +1601,24 @@ const ProjectCreatorModal: React.FC<ProjectCreatorProps> = ({
                 }
             };
 
+            // .docker-ide.json describes the project's environment (used by its terminal and
+            // its runs): keep what the template declares, i.e. the image it runs in (e.g.
+            // php:8.2-cli, composer:latest only creates Laravel projects), its server command
+            // and ports, and add the language info
+            const writeDockerIdeConfig = () => {
+                const templateConfig = parseConfig(
+                    selectedTemplate.files.find((file) => file.path === '.docker-ide.json')?.content,
+                );
+                return writeProjectFile(`${fullProjectPath}/.docker-ide.json`, JSON.stringify({
+                    ...templateConfig,
+                    language: templateConfig.language ?? selectedLanguage.id,
+                    image: templateConfig.image ?? selectedLanguage.image,
+                    framework: selectedTemplate.framework || templateConfig.framework || null,
+                    template: selectedTemplate.id,
+                    createdAt: new Date().toISOString(),
+                }, null, 2));
+            };
+
             if (selectedTemplate.requiresInstall && selectedTemplate.installCommand) {
                 if (selectedTemplate.installNeedsFiles) {
                     await writeTemplateFiles();
@@ -1619,18 +1647,7 @@ const ProjectCreatorModal: React.FC<ProjectCreatorProps> = ({
                             await writeTemplateFiles();
                         }
 
-                        // Always create/update .docker-ide.json with language info
-                        const dockerIdeConfig = {
-                            language: selectedLanguage.id,
-                            image: selectedLanguage.image,
-                            framework: selectedTemplate.framework || null,
-                            template: selectedTemplate.id,
-                            createdAt: new Date().toISOString(),
-                        };
-                        await writeProjectFile(
-                            `${fullProjectPath}/.docker-ide.json`,
-                            JSON.stringify(dockerIdeConfig, null, 2)
-                        );
+                        await writeDockerIdeConfig();
 
                         setInstallComplete(true);
                         setInstallProgress('Installation completed successfully');
@@ -1651,18 +1668,7 @@ const ProjectCreatorModal: React.FC<ProjectCreatorProps> = ({
                 // No installation needed, create template files first
                 await writeTemplateFiles();
 
-                // Always create .docker-ide.json with language info
-                const dockerIdeConfig = {
-                    language: selectedLanguage.id,
-                    image: selectedLanguage.image,
-                    framework: selectedTemplate.framework || null,
-                    template: selectedTemplate.id,
-                    createdAt: new Date().toISOString(),
-                };
-                await writeProjectFile(
-                    `${fullProjectPath}/.docker-ide.json`,
-                    JSON.stringify(dockerIdeConfig, null, 2)
-                );
+                await writeDockerIdeConfig();
 
                 onProjectCreated(fullProjectPath);
                 handleClose();
