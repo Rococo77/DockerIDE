@@ -19,12 +19,24 @@ interface ImageInfo {
 
 type PanelSection = 'containers' | 'images' | 'compose';
 
+// IPC handlers report failures as { success: false, error } instead of throwing
+interface ActionResult {
+    success: boolean;
+    error?: string;
+}
+
+// States in which Docker can stop the container (starting it would fail)
+const isActive = (state: string) => state === 'running' || state === 'restarting' || state === 'paused';
+
 const DockerPanel: React.FC<{ workspacePath?: string }> = ({ workspacePath }) => {
     const [section, setSection] = useState<PanelSection>('containers');
     const [containers, setContainers] = useState<ContainerInfo[]>([]);
     const [images, setImages] = useState<ImageInfo[]>([]);
     const [loading, setLoading] = useState(false);
+    // Loading errors are cleared by the next successful refresh; action errors stay
+    // until the next action, so the 5s auto-refresh doesn't hide them right away
     const [error, setError] = useState<string | null>(null);
+    const [actionError, setActionError] = useState<string | null>(null);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
     const [hasCompose, setHasCompose] = useState(false);
     const [composeServices, setComposeServices] = useState<string>('');
@@ -34,11 +46,15 @@ const DockerPanel: React.FC<{ workspacePath?: string }> = ({ workspacePath }) =>
     const loadContainers = useCallback(async () => {
         try {
             const result = await window.electronAPI.docker.listContainers(true);
-            if (result.success && result.data) {
-                setContainers(result.data);
+            if (result.success) {
+                setContainers(result.data || []);
                 setError(null);
+            } else {
+                // Don't keep showing containers that may no longer exist (e.g. Docker stopped)
+                setContainers([]);
+                setError(result.error || 'Impossible de charger les conteneurs');
             }
-        } catch (err) {
+        } catch {
             setError('Impossible de charger les conteneurs');
         }
     }, []);
@@ -46,11 +62,14 @@ const DockerPanel: React.FC<{ workspacePath?: string }> = ({ workspacePath }) =>
     const loadImages = useCallback(async () => {
         try {
             const result = await window.electronAPI.docker.listImages();
-            if (result.success && result.data) {
-                setImages(result.data);
+            if (result.success) {
+                setImages(result.data || []);
+            } else {
+                setImages([]);
+                setError(result.error || 'Impossible de charger les images');
             }
         } catch {
-            // silent
+            setError('Impossible de charger les images');
         }
     }, []);
 
@@ -68,6 +87,7 @@ const DockerPanel: React.FC<{ workspacePath?: string }> = ({ workspacePath }) =>
     }, [workspacePath]);
 
     const refresh = useCallback(async () => {
+        setActionError(null);
         setLoading(true);
         await Promise.all([loadContainers(), loadImages(), checkCompose()]);
         setLoading(false);
@@ -87,40 +107,37 @@ const DockerPanel: React.FC<{ workspacePath?: string }> = ({ workspacePath }) =>
         checkCompose();
     }, [workspacePath, checkCompose]);
 
+    // Runs an action and shows its error, if any (e.g. "port is already allocated")
+    const runAction = async (action: () => Promise<ActionResult>, failureMessage: string) => {
+        try {
+            const result = await action();
+            setActionError(result.success ? null : (result.error || failureMessage));
+        } catch {
+            setActionError(failureMessage);
+        }
+    };
+
     // Container actions
-    const startContainer = async (id: string) => {
+    const containerAction = async (id: string, action: () => Promise<ActionResult>, failureMessage: string) => {
         setActionLoading(id);
-        try {
-            await window.electronAPI.docker.startContainer(id);
-            await loadContainers();
-        } catch { /* handled by refresh */ }
+        await runAction(action, failureMessage);
+        await loadContainers();
         setActionLoading(null);
     };
 
-    const stopContainer = async (id: string) => {
-        setActionLoading(id);
-        try {
-            await window.electronAPI.docker.stopContainer(id);
-            await loadContainers();
-        } catch { /* handled by refresh */ }
-        setActionLoading(null);
-    };
+    const startContainer = (id: string) =>
+        containerAction(id, () => window.electronAPI.docker.startContainer(id), 'Impossible de démarrer le conteneur');
 
-    const removeContainer = async (id: string) => {
-        setActionLoading(id);
-        try {
-            await window.electronAPI.docker.removeContainer(id, { force: true });
-            await loadContainers();
-        } catch { /* handled by refresh */ }
-        setActionLoading(null);
-    };
+    const stopContainer = (id: string) =>
+        containerAction(id, () => window.electronAPI.docker.stopContainer(id), 'Impossible d\'arrêter le conteneur');
+
+    const removeContainer = (id: string) =>
+        containerAction(id, () => window.electronAPI.docker.removeContainer(id, { force: true }), 'Impossible de supprimer le conteneur');
 
     const removeImage = async (id: string) => {
         setActionLoading(id);
-        try {
-            await window.electronAPI.docker.removeImage(id, { force: true });
-            await loadImages();
-        } catch { /* handled by refresh */ }
+        await runAction(() => window.electronAPI.docker.removeImage(id, { force: true }), 'Impossible de supprimer l\'image');
+        await loadImages();
         setActionLoading(null);
     };
 
@@ -128,20 +145,16 @@ const DockerPanel: React.FC<{ workspacePath?: string }> = ({ workspacePath }) =>
     const composeUp = async () => {
         if (!workspacePath) return;
         setComposeLoading(true);
-        try {
-            await window.electronAPI.compose.up(workspacePath, { build: true });
-            await loadContainers();
-        } catch { /* */ }
+        await runAction(() => window.electronAPI.compose.up(workspacePath, { build: true }), 'docker compose up a échoué');
+        await loadContainers();
         setComposeLoading(false);
     };
 
     const composeDown = async () => {
         if (!workspacePath) return;
         setComposeLoading(true);
-        try {
-            await window.electronAPI.compose.down(workspacePath);
-            await loadContainers();
-        } catch { /* */ }
+        await runAction(() => window.electronAPI.compose.down(workspacePath), 'docker compose down a échoué');
+        await loadContainers();
         setComposeLoading(false);
     };
 
@@ -190,7 +203,7 @@ const DockerPanel: React.FC<{ workspacePath?: string }> = ({ workspacePath }) =>
                 </button>
             </div>
 
-            {error && <div className="docker-error">{error}</div>}
+            {(actionError || error) && <div className="docker-error">{actionError || error}</div>}
 
             {/* Summary */}
             <div className="docker-summary">
@@ -266,7 +279,7 @@ const DockerPanel: React.FC<{ workspacePath?: string }> = ({ workspacePath }) =>
                                 <div className="docker-item-actions">
                                     {actionLoading === c.Id ? (
                                         <span className="action-loading">...</span>
-                                    ) : c.State === 'running' ? (
+                                    ) : isActive(c.State) ? (
                                         <button
                                             className="docker-action-btn stop"
                                             onClick={() => stopContainer(c.Id)}

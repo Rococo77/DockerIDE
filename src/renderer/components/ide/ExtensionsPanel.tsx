@@ -27,13 +27,15 @@ const AVAILABLE_IMAGES: LanguageImage[] = [
         name: 'Node.js',
         description: 'Server-side JavaScript runtime',
         icon: 'JS',
-        versions: ['22', '20-lts', '18-lts'],
+        // Docker Hub has no "-lts" tags: node:20-lts / node:18-lts don't exist
+        versions: ['22', '20', '18'],
         installed: false,
         category: 'language',
     },
     {
-        id: 'openjdk',
-        name: 'Java (OpenJDK)',
+        // The openjdk image is deprecated and no longer has these tags; the runner uses Temurin too
+        id: 'eclipse-temurin',
+        name: 'Java (Eclipse Temurin)',
         description: 'Robust object-oriented language',
         icon: 'JV',
         versions: ['21', '17', '11'],
