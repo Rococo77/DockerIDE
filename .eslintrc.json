@@ -13,5 +13,18 @@
     "plugin:import/typescript"
   ],
   "parser": "@typescript-eslint/parser",
-  "ignorePatterns": ["vitest.config.ts", "vite.*.config.ts"]
+  "ignorePatterns": [
+    "vitest.config.ts",
+    "vite.*.config.ts"
+  ],
+  "rules": {
+    "import/no-unresolved": [
+      "error",
+      {
+        "ignore": [
+          "\\?worker$"
+        ]
+      }
+    ]
+  }
 }

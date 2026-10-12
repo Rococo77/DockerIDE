@@ -1,5 +1,7 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
+// Before any editor is created: use the bundled Monaco, not the CDN
+import './monaco';
 import App from './App';
 import { ToastProvider } from './components/ide/ToastContainer';
 import '../index.css';

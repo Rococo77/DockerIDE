@@ -11,6 +11,11 @@
     "outDir": "dist",
     "moduleResolution": "node",
     "resolveJsonModule": true,
-    "jsx": "react"
+    "jsx": "react",
+    "paths": {
+      "monaco-editor": [
+        "node_modules/monaco-editor/esm/vs/index.d.ts"
+      ]
+    }
   }
 }
