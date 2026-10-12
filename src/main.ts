@@ -5,6 +5,7 @@ import { updateElectronApp } from 'update-electron-app';
 import { registerDockerHandlers } from './main/ipc/dockerHandlers';
 import { registerFileSystemHandlers } from './main/ipc/fileSystemHandlers';
 import { registerRunnerHandlers } from './main/ipc/runnerHandlers';
+import { registerWindowHandlers } from './main/ipc/windowHandlers';
 import log from './main/logger';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
@@ -70,6 +71,7 @@ app.whenReady().then(() => {
   registerDockerHandlers();
   registerFileSystemHandlers();
   registerRunnerHandlers();
+  registerWindowHandlers();
   createWindow();
 });
 

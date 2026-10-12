@@ -75,7 +75,7 @@ const api = {
         onProgress: (callback: (data: { status: string }) => void) => {
             const handler = (_ev: any, data: any) => callback(data);
             ipcRenderer.on('runner:progress', handler);
-            return () => ipcRenderer.removeListener('runner:progress', handler);
+            return () => { ipcRenderer.removeListener('runner:progress', handler); };
         },
         // Setup framework in project
         setupFramework: (config: { projectPath: string; image: string; installCommand: string }) =>
@@ -84,13 +84,13 @@ const api = {
         onSetupProgress: (callback: (data: { status: string; type: string }) => void) => {
             const handler = (_ev: any, data: any) => callback(data);
             ipcRenderer.on('runner:setup-progress', handler);
-            return () => ipcRenderer.removeListener('runner:setup-progress', handler);
+            return () => { ipcRenderer.removeListener('runner:setup-progress', handler); };
         },
         // Listen for setup output (returns cleanup function)
         onSetupOutput: (callback: (data: { data: string; type: string }) => void) => {
             const handler = (_ev: any, data: any) => callback(data);
             ipcRenderer.on('runner:setup-output', handler);
-            return () => ipcRenderer.removeListener('runner:setup-output', handler);
+            return () => { ipcRenderer.removeListener('runner:setup-output', handler); };
         },
         // Project container management
         getProjectContainer: (projectPath: string) => 
@@ -124,13 +124,13 @@ const api = {
         onMessage: (callback: (data: { shellId: string; type: string; data: string }) => void) => {
             const handler = (_ev: any, data: any) => callback(data);
             ipcRenderer.on('shell:message', handler);
-            return () => ipcRenderer.removeListener('shell:message', handler);
+            return () => { ipcRenderer.removeListener('shell:message', handler); };
         },
         // Listen for shell close (returns cleanup function)
         onClosed: (callback: (data: { shellId: string }) => void) => {
             const handler = (_ev: any, data: any) => callback(data);
             ipcRenderer.on('shell:closed', handler);
-            return () => ipcRenderer.removeListener('shell:closed', handler);
+            return () => { ipcRenderer.removeListener('shell:closed', handler); };
         },
     },
     compose: {
@@ -144,6 +144,13 @@ const api = {
             ipcRenderer.invoke('compose:logs', projectPath, options),
         restart: (projectPath: string, service?: string) =>
             ipcRenderer.invoke('compose:restart', projectPath, service),
+    },
+    // Custom title bar controls (the window is frameless)
+    window: {
+        minimize: () => ipcRenderer.invoke('window:minimize'),
+        toggleMaximize: () => ipcRenderer.invoke('window:toggle-maximize'),
+        close: () => ipcRenderer.invoke('window:close'),
+        quit: () => ipcRenderer.invoke('app:quit'),
     },
     // Wait for main:ready signal
     whenReady: () => mainReadyPromise,

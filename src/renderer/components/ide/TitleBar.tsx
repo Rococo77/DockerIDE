@@ -10,15 +10,19 @@ const TitleBar: React.FC<TitleBarProps> = ({ projectName, onNewProject, onOpenFo
     const [showFileMenu, setShowFileMenu] = useState(false);
 
     const handleMinimize = () => {
-        window.electronAPI?.window?.minimize?.();
+        window.electronAPI.window.minimize();
     };
 
     const handleMaximize = () => {
-        window.electronAPI?.window?.maximize?.();
+        window.electronAPI.window.toggleMaximize();
     };
 
     const handleClose = () => {
-        window.electronAPI?.window?.close?.();
+        window.electronAPI.window.close();
+    };
+
+    const handleQuit = () => {
+        window.electronAPI.window.quit();
     };
 
     return (
@@ -48,7 +52,7 @@ const TitleBar: React.FC<TitleBarProps> = ({ projectName, onNewProject, onOpenFo
                                 <span className="menu-shortcut">Ctrl+O</span>
                             </button>
                             <div className="menu-separator" />
-                            <button className="menu-item" onClick={handleClose}>
+                            <button className="menu-item" onClick={handleQuit}>
                                 <span>Quitter</span>
                                 <span className="menu-shortcut">Alt+F4</span>
                             </button>
