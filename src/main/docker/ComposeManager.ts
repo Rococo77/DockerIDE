@@ -1,6 +1,23 @@
 import { spawn, execSync, ChildProcess } from 'child_process';
+import * as os from 'os';
 import * as path from 'path';
 import * as fs from 'fs';
+
+// Apps launched from the Finder on macOS don't get the shell's PATH (only
+// /usr/bin:/bin:/usr/sbin:/sbin), so the docker CLI installed by Docker Desktop
+// or Homebrew isn't found. Elsewhere the inherited environment is used as-is.
+function dockerCliEnv(): NodeJS.ProcessEnv | undefined {
+    if (process.platform !== 'darwin') return undefined;
+    const dirs = (process.env.PATH ?? '').split(path.delimiter).filter(Boolean);
+    for (const dir of ['/usr/local/bin', '/opt/homebrew/bin', path.join(os.homedir(), '.docker', 'bin'), '/Applications/Docker.app/Contents/Resources/bin']) {
+        if (!dirs.includes(dir)) dirs.push(dir);
+    }
+    return { ...process.env, PATH: dirs.join(path.delimiter) };
+}
+
+// `up --build` can build images and pull big ones: give it more time than other commands
+const COMPOSE_TIMEOUT_MS = 2 * 60 * 1000;
+const COMPOSE_UP_TIMEOUT_MS = 15 * 60 * 1000;
 
 // Compose service names: letters, digits, '.', '_' and '-', never starting with '-'
 // so a value coming from the renderer can't be parsed as a CLI option.
@@ -56,6 +73,7 @@ export class ComposeManager {
             const result = execSync('docker compose version', {
                 encoding: 'utf-8',
                 timeout: 5000,
+                env: dockerCliEnv(),
             });
             if (result.includes('Docker Compose')) {
                 this.composeBinary = 'docker';
@@ -69,6 +87,7 @@ export class ComposeManager {
             execSync('docker-compose version', {
                 encoding: 'utf-8',
                 timeout: 5000,
+                env: dockerCliEnv(),
             });
             this.composeBinary = 'docker-compose';
         } catch {
@@ -112,7 +131,7 @@ export class ComposeManager {
         if (options?.detach !== false) args.push('-d');
         if (options?.build) args.push('--build');
 
-        return this.runCompose(projectPath, args);
+        return this.runCompose(projectPath, args, COMPOSE_UP_TIMEOUT_MS);
     }
 
     /**
@@ -201,7 +220,7 @@ export class ComposeManager {
     /**
      * Run a compose command
      */
-    private runCompose(projectPath: string, args: string[]): Promise<ComposeResult> {
+    private runCompose(projectPath: string, args: string[], timeoutMs = COMPOSE_TIMEOUT_MS): Promise<ComposeResult> {
         return new Promise((resolve) => {
             const cmd = this.getComposeCmd();
             const fullArgs = [...cmd.slice(1), ...args];
@@ -209,7 +228,7 @@ export class ComposeManager {
 
             // No shell: arguments are passed as-is. The Docker CLI inherits the
             // user's environment (PATH/Path, SystemRoot, DOCKER_CONTEXT, XDG_RUNTIME_DIR...).
-            const proc = spawn(binary, fullArgs, { cwd: projectPath });
+            const proc = spawn(binary, fullArgs, { cwd: projectPath, env: dockerCliEnv() });
 
             let stdout = '';
             let stderr = '';
@@ -247,7 +266,7 @@ export class ComposeManager {
                 });
             });
 
-            // Timeout after 2 minutes
+            // Timeout (2 minutes, 15 for up)
             const timeout = setTimeout(() => {
                 if (!resolved) {
                     proc.kill();
@@ -257,7 +276,7 @@ export class ComposeManager {
                         error: 'Command timed out',
                     });
                 }
-            }, 120000);
+            }, timeoutMs);
         });
     }
 }

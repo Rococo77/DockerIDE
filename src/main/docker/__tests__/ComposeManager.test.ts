@@ -52,6 +52,19 @@ describe('ComposeManager', () => {
         expect(spawnMock).not.toHaveBeenCalled();
     });
 
+    it('adds the Docker CLI locations to PATH on macOS (apps started from the Finder lack them)', async () => {
+        const platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+        Object.defineProperty(process, 'platform', { value: 'darwin' });
+        try {
+            await compose.ps('/projects/demo');
+        } finally {
+            Object.defineProperty(process, 'platform', platform);
+        }
+
+        const env = spawnMock.mock.calls[0][2].env;
+        expect(env.PATH.split(':')).toEqual(expect.arrayContaining(['/usr/local/bin', '/opt/homebrew/bin']));
+    });
+
     it.each([0, -1, 1.5, '--follow'])('rejects tail value %j', async (tail) => {
         await expect(compose.logs('/projects/demo', { tail: tail as number })).rejects.toThrow('Invalid tail value');
         expect(spawnMock).not.toHaveBeenCalled();
