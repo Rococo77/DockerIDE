@@ -2,11 +2,14 @@ import Docker, { Container, ContainerCreateOptions } from 'dockerode';
 import { DockerManager } from './DockerManager';
 
 export class ContainerManager {
-	private docker: Docker;
 	private static instance: ContainerManager;
 
-	private constructor() {
-		this.docker = DockerManager.getInstance().getDockerInstance();
+	// eslint-disable-next-line @typescript-eslint/no-empty-function
+	private constructor() {}
+
+	// Looked up on each call: DockerManager.checkConnection() may switch to another client
+	private get docker(): Docker {
+		return DockerManager.getInstance().getDockerInstance();
 	}
 
 	public static getInstance(): ContainerManager {

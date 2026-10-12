@@ -13,18 +13,12 @@ export interface DockerInfo {
 }
 
 export class DockerManager {
-    private docker: Docker;
+    // Created on first use, see getDockerInstance()
+    private docker: Docker | null = null;
     private static instance: DockerManager;
 
-    private constructor() {
-        // Connexion par défaut au socket Docker
-        // Windows: npipe, Linux/Mac: socket Unix
-        this.docker = new Docker({
-            socketPath: process.platform === 'win32'
-                ? '//./pipe/docker_engine'
-                : '/var/run/docker.sock'
-        });
-    }
+    // eslint-disable-next-line @typescript-eslint/no-empty-function
+    private constructor() {}
 
     public static getInstance(): DockerManager {
         if (!DockerManager.instance) {
@@ -90,7 +84,7 @@ export class DockerManager {
      */
     public async ping(): Promise<boolean> {
         try {
-            await this.docker.ping();
+            await this.getDockerInstance().ping();
             return true;
         } catch (error) {
             return false;
@@ -98,9 +92,16 @@ export class DockerManager {
     }
 
     /**
-     * Récupère l'instance Docker (à utiliser par les autres managers)
+     * Docker client shared by every manager, so that they all talk to the daemon found by
+     * checkConnection(). dockerode's defaults follow DOCKER_HOST and Docker Desktop's
+     * ~/.docker/run/docker.sock. It is created on first use because creating it can throw
+     * (e.g. DOCKER_CERT_PATH pointing to a deleted folder), which must not prevent the
+     * IPC handlers from registering and the window from opening.
      */
     public getDockerInstance(): Docker {
+        if (!this.docker) {
+            this.docker = new Docker();
+        }
         return this.docker;
     }
 
