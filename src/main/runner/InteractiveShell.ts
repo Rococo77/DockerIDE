@@ -1,7 +1,8 @@
 import Docker from 'dockerode';
 import { EventEmitter } from 'events';
-import * as stream from 'stream';
 import * as path from 'path';
+import { DockerManager } from '../docker/DockerManager';
+import { ImageManager } from '../docker/ImageManager';
 import log from '../logger';
 
 interface ShellConfig {
@@ -26,17 +27,15 @@ const LANGUAGE_SHELLS: Record<string, { image: string; shell: string[] }> = {
 };
 
 export class InteractiveShell extends EventEmitter {
-    private docker: Docker;
     private container: Docker.Container | null = null;
-    private execInstance: Docker.Exec | null = null;
     private outputStream: NodeJS.ReadWriteStream | null = null;
     private isRunning = false;
     private containerId: string | null = null;
     private containerName: string | null = null;
 
-    constructor() {
-        super();
-        this.docker = new Docker();
+    // The client shared with the other managers, looked up on each call
+    private get docker(): Docker {
+        return DockerManager.getInstance().getDockerInstance();
     }
 
     /**
@@ -57,24 +56,13 @@ export class InteractiveShell extends EventEmitter {
             } as ShellMessage);
 
             // Check if image exists
-            try {
-                await this.docker.getImage(imageName).inspect();
-            } catch {
-                this.emit('message', { 
-                    type: 'system', 
-                    data: `Downloading image ${imageName}...` 
+            const imageManager = ImageManager.getInstance();
+            if (!(await imageManager.hasImage(imageName))) {
+                this.emit('message', {
+                    type: 'system',
+                    data: `Downloading image ${imageName}...`
                 } as ShellMessage);
-
-                // Pull image
-                await new Promise<void>((resolve, reject) => {
-                    this.docker.pull(imageName, (err: any, stream: NodeJS.ReadableStream) => {
-                        if (err) return reject(err);
-                        this.docker.modem.followProgress(stream, (err) => {
-                            if (err) reject(err);
-                            else resolve();
-                        });
-                    });
-                });
+                await imageManager.pullImage(imageName);
             }
 
             // Create container - name based on project folder
@@ -98,7 +86,9 @@ export class InteractiveShell extends EventEmitter {
                 WorkingDir: config.workspacePath ? '/workspace' : '/',
                 Tty: true,
                 OpenStdin: true,
-                StdinOnce: false,
+                // Close stdin when the IDE detaches (app closed or crashed): the shell then
+                // exits and AutoRemove deletes the container instead of leaving it running
+                StdinOnce: true,
                 HostConfig: hostConfig,
             });
 
@@ -110,13 +100,7 @@ export class InteractiveShell extends EventEmitter {
             this.isRunning = true;
 
             // Attach to container
-            this.outputStream = await this.container.attach({
-                stream: true,
-                stdin: true,
-                stdout: true,
-                stderr: true,
-                hijack: true,
-            });
+            this.outputStream = await this.attachToShell(this.container);
 
             // Handle output - for TTY mode, data comes as raw text
             this.outputStream.on('data', (chunk: Buffer) => {
@@ -133,13 +117,9 @@ export class InteractiveShell extends EventEmitter {
                     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // Remove control chars except newline/tab
                     .trim();
                 
-                // Skip empty lines and debug/config output
-                if (cleanText.length > 0 && 
-                    !cleanText.includes('"stream"') && 
-                    !cleanText.includes('"stdin"') &&
-                    !cleanText.includes('"stdout"') &&
-                    !cleanText.includes('"stderr"') &&
-                    !cleanText.includes('"hijack"')) {
+                // Skip empty lines. (The attach options used to be echoed here; filtering every
+                // chunk containing "stdout", "stream"... also hid legitimate output.)
+                if (cleanText.length > 0) {
                     this.emit('message', { type: 'output', data: cleanText } as ShellMessage);
                 }
             });
@@ -175,6 +155,33 @@ export class InteractiveShell extends EventEmitter {
             } as ShellMessage);
             return false;
         }
+    }
+
+    /**
+     * Attach to the shell's stdin/stdout. Not with container.attach(): docker-modem sends the
+     * attach options as a JSON request body, which Docker can pass on to the shell's stdin,
+     * corrupting the first command typed (`{"stream":true,...}ls`). Here the options go in the
+     * query string and the body is empty; writing it still makes Node send the headers.
+     */
+    private attachToShell(container: Docker.Container): Promise<NodeJS.ReadWriteStream> {
+        return new Promise((resolve, reject) => {
+            this.docker.modem.dial({
+                path: `/containers/${container.id}/attach?`,
+                method: 'POST',
+                options: { stream: true, stdin: true, stdout: true, stderr: true },
+                file: Buffer.alloc(0),
+                isStream: true,
+                hijack: true,
+                openStdin: true,
+                statusCodes: { 101: true, 200: true, 404: 'no such container', 500: 'server error' },
+            }, (err: Error | null, stream: NodeJS.ReadWriteStream) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(stream);
+                }
+            });
+        });
     }
 
     /**

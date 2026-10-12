@@ -1,6 +1,11 @@
 import Docker from 'dockerode';
+import { createHash } from 'crypto';
 import { EventEmitter } from 'events';
 import * as path from 'path';
+import { Writable } from 'stream';
+import { StringDecoder } from 'string_decoder';
+import { DockerManager } from '../docker/DockerManager';
+import { ImageManager } from '../docker/ImageManager';
 import log from '../logger';
 
 interface ProjectContainerConfig {
@@ -31,17 +36,23 @@ interface ExecResult {
  */
 export class ProjectContainerManager extends EventEmitter {
     private static instance: ProjectContainerManager;
-    private docker: Docker;
     private containers: Map<string, ContainerInfo> = new Map();
-    
+    // Containers being looked up or created, so that two runs started together
+    // (F5 and the Run button) share one container instead of both creating it
+    private pendingContainers = new Map<string, Promise<ContainerInfo>>();
+
     // Prefix for container names to identify Docker IDE containers
     private static readonly CONTAINER_PREFIX = 'docker-ide-project-';
 
     private constructor() {
         super();
-        this.docker = new Docker();
         // Load existing containers on startup
         this.syncExistingContainers();
+    }
+
+    // The client shared with the other managers, looked up on each call
+    private get docker(): Docker {
+        return DockerManager.getInstance().getDockerInstance();
     }
 
     static getInstance(): ProjectContainerManager {
@@ -52,15 +63,22 @@ export class ProjectContainerManager extends EventEmitter {
     }
 
     /**
-     * Generate a unique container name based on project path
+     * Container name for a project: its folder name, readable in Docker tools, plus a hash
+     * of its full path, so that two projects with the same folder name in different places
+     * (~/cours/tp1 and ~/perso/tp1) never share a container mounted on the other folder.
      */
     private getContainerName(projectPath: string): string {
-        const projectName = path.basename(projectPath)
+        const resolved = path.resolve(projectPath);
+        // Windows paths are case-insensitive
+        const key = process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+        const hash = createHash('sha256').update(key).digest('hex').slice(0, 12);
+        const projectName = path.basename(resolved)
             .toLowerCase()
             .replace(/[^a-z0-9]/g, '-')
             .replace(/-+/g, '-')
-            .replace(/^-|-$/g, '');
-        return `${ProjectContainerManager.CONTAINER_PREFIX}${projectName}`;
+            .replace(/^-|-$/g, '')
+            .slice(0, 40);
+        return `${ProjectContainerManager.CONTAINER_PREFIX}${projectName ? `${projectName}-` : ''}${hash}`;
     }
 
     /**
@@ -98,7 +116,18 @@ export class ProjectContainerManager extends EventEmitter {
      */
     async getOrCreateContainer(config: ProjectContainerConfig): Promise<ContainerInfo> {
         const containerName = this.getContainerName(config.projectPath);
-        
+        const pending = this.pendingContainers.get(containerName);
+        if (pending) {
+            return pending;
+        }
+
+        const lookup = this.findOrCreateContainer(config, containerName)
+            .finally(() => this.pendingContainers.delete(containerName));
+        this.pendingContainers.set(containerName, lookup);
+        return lookup;
+    }
+
+    private async findOrCreateContainer(config: ProjectContainerConfig, containerName: string): Promise<ContainerInfo> {
         // Check if we already have this container in memory
         let containerInfo = this.containers.get(containerName);
         
@@ -128,9 +157,10 @@ export class ProjectContainerManager extends EventEmitter {
         // Check Docker directly if not in memory
         if (!containerInfo) {
             try {
-                const containers = await this.docker.listContainers({ 
+                const containers = await this.docker.listContainers({
                     all: true,
-                    filters: { name: [containerName] }
+                    // Docker matches names partially ("tp1" would find "tp10"): anchor it
+                    filters: { name: [`^/${containerName}$`] }
                 });
                 
                 if (containers.length > 0) {
@@ -174,24 +204,14 @@ export class ProjectContainerManager extends EventEmitter {
         });
 
         // Ensure image exists
-        try {
-            await this.docker.getImage(config.image).inspect();
-        } catch {
-            this.emit('status', { 
-                projectPath: config.projectPath, 
+        const imageManager = ImageManager.getInstance();
+        if (!(await imageManager.hasImage(config.image))) {
+            this.emit('status', {
+                projectPath: config.projectPath,
                 status: 'pulling',
                 message: `Downloading image ${config.image}...`
             });
-
-            await new Promise<void>((resolve, reject) => {
-                this.docker.pull(config.image, (err: any, stream: NodeJS.ReadableStream) => {
-                    if (err) return reject(err);
-                    this.docker.modem.followProgress(stream, (err) => {
-                        if (err) reject(err);
-                        else resolve();
-                    });
-                });
-            });
+            await imageManager.pullImage(config.image);
         }
 
         // Create the container
@@ -228,18 +248,33 @@ export class ProjectContainerManager extends EventEmitter {
 
         // Install build tools for compiled languages using alpine images
         if (config.image.startsWith('alpine:') && (config.language === 'c' || config.language === 'cpp')) {
-            await container.start();
-            containerInfo.status = 'running';
-            const setupExec = await container.exec({
-                Cmd: ['sh', '-c', 'apk add --no-cache gcc g++ musl-dev make'],
-                AttachStdout: true,
-                AttachStderr: true,
-            });
-            const setupStream = await setupExec.start({ hijack: true, stdin: false });
-            await new Promise<void>((resolve) => {
-                setupStream.on('end', resolve);
-                setupStream.on('error', () => resolve());
-            });
+            try {
+                await container.start();
+                containerInfo.status = 'running';
+                const setupExec = await container.exec({
+                    Cmd: ['sh', '-c', 'apk add --no-cache gcc g++ musl-dev make'],
+                    AttachStdout: true,
+                    AttachStderr: true,
+                });
+                const setupStream = await setupExec.start({ hijack: true, stdin: false });
+                // The output isn't shown, but it must be read: a stream that nobody
+                // reads never emits 'end', which made the first C/C++ run hang forever
+                setupStream.resume();
+                await new Promise<void>((resolve, reject) => {
+                    setupStream.on('end', resolve);
+                    setupStream.on('close', resolve);
+                    setupStream.on('error', reject);
+                });
+                const exitCode = await this.waitForExitCode(setupExec);
+                if (exitCode !== 0) {
+                    throw new Error(`apk add exited with code ${exitCode}`);
+                }
+            } catch (error: any) {
+                // Don't keep a container without a compiler: the next run tries again
+                this.containers.delete(containerName);
+                await container.remove({ force: true }).catch((): void => undefined);
+                throw new Error(`Impossible d'installer le compilateur C/C++ dans le conteneur (${error.message}). Vérifiez la connexion réseau.`);
+            }
         }
 
         this.emit('status', {
@@ -299,58 +334,35 @@ export class ProjectContainerManager extends EventEmitter {
 
             // Start exec and capture output
             const stream = await exec.start({ hijack: true, stdin: false });
-            
+
             let stdout = '';
             let stderr = '';
-
-            await new Promise<void>((resolve, reject) => {
-                // For TTY mode, output comes as raw text
-                // For non-TTY mode, we need to demux
-                stream.on('data', (chunk: Buffer) => {
-                    // Docker multiplexed stream format
-                    let offset = 0;
-                    while (offset < chunk.length) {
-                        if (offset + 8 > chunk.length) {
-                            // Incomplete header, treat as raw output
-                            const text = chunk.slice(offset).toString('utf-8');
-                            stdout += text;
-                            config?.onOutput?.(text, 'stdout');
-                            break;
-                        }
-
-                        const streamType = chunk[offset];
-                        const size = chunk.readUInt32BE(offset + 4);
-                        offset += 8;
-
-                        if (offset + size > chunk.length) {
-                            // Incomplete payload, treat as raw
-                            const text = chunk.slice(offset - 8).toString('utf-8');
-                            stdout += text;
-                            config?.onOutput?.(text, 'stdout');
-                            break;
-                        }
-
-                        const payload = chunk.slice(offset, offset + size).toString('utf-8');
-                        
-                        if (streamType === 2) {
-                            stderr += payload;
-                            config?.onOutput?.(payload, 'stderr');
+            const collect = (type: 'stdout' | 'stderr') => {
+                // Keeps multi-byte characters split across frames intact
+                const decoder = new StringDecoder('utf8');
+                return new Writable({
+                    write(chunk: Buffer, _encoding, callback) {
+                        const text = decoder.write(chunk);
+                        if (type === 'stderr') {
+                            stderr += text;
                         } else {
-                            stdout += payload;
-                            config?.onOutput?.(payload, 'stdout');
+                            stdout += text;
                         }
-                        
-                        offset += size;
-                    }
+                        if (text) config?.onOutput?.(text, type);
+                        callback();
+                    },
                 });
+            };
 
+            // Non-TTY exec output is multiplexed (an 8-byte header per frame) and a frame can
+            // be split across chunks: docker-modem reassembles the frames
+            this.docker.modem.demuxStream(stream, collect('stdout'), collect('stderr'));
+            await new Promise<void>((resolve, reject) => {
                 stream.on('end', () => resolve());
                 stream.on('error', (err) => reject(err));
             });
 
-            // Get exit code
-            const inspectResult = await exec.inspect();
-            const exitCode = inspectResult.ExitCode ?? 0;
+            const exitCode = (await this.waitForExitCode(exec)) ?? 0;
 
             return {
                 success: exitCode === 0,
@@ -372,12 +384,25 @@ export class ProjectContainerManager extends EventEmitter {
     }
 
     /**
+     * Exit code of a finished exec. The output stream can end just before Docker records
+     * the exit code, so wait a little for it instead of reading null.
+     */
+    private async waitForExitCode(exec: Docker.Exec): Promise<number | null> {
+        for (let attempt = 0; attempt < 20; attempt++) {
+            const { Running, ExitCode } = await exec.inspect();
+            if (!Running && ExitCode !== null) return ExitCode;
+            await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+        return null;
+    }
+
+    /**
      * Stop a project's container
      */
     async stopContainer(projectPath: string): Promise<void> {
         const containerName = this.getContainerName(projectPath);
         const containerInfo = this.containers.get(containerName);
-        
+
         if (containerInfo) {
             try {
                 const container = this.docker.getContainer(containerInfo.id);
@@ -385,7 +410,12 @@ export class ProjectContainerManager extends EventEmitter {
                 containerInfo.status = 'stopped';
                 log.info(`[ProjectContainer] Stopped container ${containerName}`);
             } catch (error: any) {
-                if (!error.message?.includes('is not running')) {
+                if (error?.statusCode === 404) {
+                    // Removed outside the IDE (Docker panel, CLI)
+                    this.containers.delete(containerName);
+                } else if (error?.statusCode === 304) {
+                    containerInfo.status = 'stopped';
+                } else {
                     log.error(`[ProjectContainer] Error stopping container:`, error);
                 }
             }
@@ -428,6 +458,29 @@ export class ProjectContainerManager extends EventEmitter {
     getContainerInfo(projectPath: string): ContainerInfo | undefined {
         const containerName = this.getContainerName(projectPath);
         return this.containers.get(containerName);
+    }
+
+    /**
+     * Container info checked against Docker: the container may have been stopped or
+     * removed outside the runner (Docker panel, CLI), which left the status bar stale.
+     */
+    async refreshContainerInfo(projectPath: string): Promise<ContainerInfo | undefined> {
+        const containerName = this.getContainerName(projectPath);
+        const info = this.containers.get(containerName);
+        if (!info) return undefined;
+
+        try {
+            const inspect = await this.docker.getContainer(info.id).inspect();
+            info.status = inspect.State.Running ? 'running' : 'stopped';
+            return info;
+        } catch (error: any) {
+            if (error?.statusCode === 404) {
+                this.containers.delete(containerName);
+                return undefined;
+            }
+            // Docker unreachable: keep the last known state
+            return info;
+        }
     }
 
     /**

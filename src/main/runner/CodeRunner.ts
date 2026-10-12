@@ -23,6 +23,9 @@ interface RunConfig {
 // Language configs with optimized images (alpine/slim variants to reduce pull size)
 const LANGUAGE_CONFIGS: Record<string, {
     image: string;
+    // Arguments run as-is in the container (no shell around them). Multi-step commands use
+    // `sh -c '<script>' sh <file> ...`: the file path is a positional argument ("$1"),
+    // never pasted into the script, so names with spaces or quotes work.
     command: (filePath: string) => string[];
     fileExtensions: string[];
     // Optimized Dockerfile template for production builds
@@ -72,7 +75,7 @@ CMD ["node", "dist/${entry.replace('.ts', '.js')}"]`,
         image: 'eclipse-temurin:17-jdk-alpine',
         command: (file) => {
             const className = path.basename(file, '.java');
-            return ['sh', '-c', `javac ${file} && java -cp $(dirname ${file}) ${className}`];
+            return ['sh', '-c', 'javac "$1" && java -cp "$(dirname "$1")" "$2"', 'sh', file, className];
         },
         fileExtensions: ['java'],
         dockerfile: (entry) => {
@@ -107,7 +110,7 @@ ENTRYPOINT ["/main"]`,
         image: 'rust:1.75-alpine',
         command: (file) => {
             const outputName = path.basename(file, '.rs');
-            return ['sh', '-c', `rustc ${file} -o /tmp/${outputName} && /tmp/${outputName}`];
+            return ['sh', '-c', 'rustc "$1" -o "/tmp/$2" && "/tmp/$2"', 'sh', file, outputName];
         },
         fileExtensions: ['rs'],
         dockerfile: (entry) => `FROM rust:1.75-alpine AS build
@@ -144,7 +147,7 @@ CMD ["php", "${entry}"]`,
         image: 'alpine:3.19',
         command: (file) => {
             const outputName = path.basename(file, '.c');
-            return ['sh', '-c', `gcc ${file} -o /tmp/${outputName} -static && /tmp/${outputName}`];
+            return ['sh', '-c', 'gcc "$1" -o "/tmp/$2" -static && "/tmp/$2"', 'sh', file, outputName];
         },
         fileExtensions: ['c'],
         dockerfile: (entry) => {
@@ -164,7 +167,7 @@ ENTRYPOINT ["/${outputName}"]`;
         image: 'alpine:3.19',
         command: (file) => {
             const outputName = path.basename(file, '.cpp');
-            return ['sh', '-c', `g++ ${file} -o /tmp/${outputName} -static && /tmp/${outputName}`];
+            return ['sh', '-c', 'g++ "$1" -o "/tmp/$2" -static && "/tmp/$2"', 'sh', file, outputName];
         },
         fileExtensions: ['cpp', 'cc', 'cxx'],
         dockerfile: (entry) => {
@@ -215,10 +218,8 @@ export class CodeRunner {
      */
     async isImageAvailable(imageName: string): Promise<boolean> {
         try {
-            const images = await this.imageManager.listImages();
-            return images.some(img => 
-                img.RepoTags?.some(tag => tag === imageName || tag.startsWith(imageName.split(':')[0]))
-            );
+            // Exact name and tag: python:3.11-alpine being there says nothing about python:3.11-slim
+            return await this.imageManager.hasImage(imageName);
         } catch {
             return false;
         }
@@ -293,7 +294,7 @@ export class CodeRunner {
             onProgress?.('Running code...');
             const result = await this.projectContainerManager.exec(
                 workspacePath,
-                ['sh', '-c', command.join(' ')],
+                command,
                 {
                     image: langConfig.image,
                     language,
@@ -420,12 +421,21 @@ export class CodeRunner {
             await container.start();
 
             // Wait for container to finish (5 min timeout for framework install)
-            const result = await Promise.race([
-                container.wait(),
-                new Promise<{ StatusCode: number }>((_, reject) =>
-                    setTimeout(() => reject(new Error('Timeout')), 300000) // 5 min
-                ),
-            ]);
+            let timer: NodeJS.Timeout | undefined;
+            const timeout = new Promise<never>((_, reject) => {
+                timer = setTimeout(() => reject(new Error('Timeout')), 300000); // 5 min
+            });
+            let result: { StatusCode: number };
+            try {
+                result = await Promise.race([container.wait(), timeout]);
+            } catch (error) {
+                // Stop the install rather than letting it keep writing into the project
+                // in the background (AutoRemove then deletes the container)
+                await container.kill().catch((): void => undefined);
+                throw error;
+            } finally {
+                clearTimeout(timer);
+            }
 
             const executionTime = Date.now() - startTime;
 
@@ -467,7 +477,7 @@ export class CodeRunner {
      * Get container info for a project
      */
     getProjectContainerInfo(projectPath: string) {
-        return this.projectContainerManager.getContainerInfo(projectPath);
+        return this.projectContainerManager.refreshContainerInfo(projectPath);
     }
 
     /**

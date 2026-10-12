@@ -1,9 +1,19 @@
-import { ipcMain, BrowserWindow } from 'electron';
+import { ipcMain, WebContents } from 'electron';
 import { CodeRunner } from '../runner/CodeRunner';
 import { ShellManager } from '../runner/InteractiveShell';
 import { ComposeManager } from '../docker/ComposeManager';
 import { FileSystemManager } from '../fs/FileSystemManager';
 import log from '../logger';
+
+// Sends events to the window that made the request, if it still exists: on macOS the app
+// keeps running after its window is closed, and sending to a destroyed one throws
+function replyTo(sender: WebContents) {
+    return (channel: string, payload: unknown) => {
+        if (!sender.isDestroyed()) {
+            sender.send(channel, payload);
+        }
+    };
+}
 
 export function registerRunnerHandlers(): void {
     const runner = CodeRunner.getInstance();
@@ -15,17 +25,17 @@ export function registerRunnerHandlers(): void {
     log.info('[Runner] Registering code runner IPC handlers...');
 
     // Run code
-    ipcMain.handle('runner:run', async (_event, config: {
+    ipcMain.handle('runner:run', async (event, config: {
         filePath: string;
         workspacePath: string;
         language: string;
     }) => {
         try {
-            const mainWindow = BrowserWindow.getAllWindows()[0];
+            const send = replyTo(event.sender);
             
             // Progress callback to send updates to renderer
             const onProgress = (status: string) => {
-                mainWindow?.webContents.send('runner:progress', { status });
+                send('runner:progress', { status });
             };
 
             const workspacePath = await fsManager.resolveAllowedPath(config.workspacePath);
@@ -70,11 +80,11 @@ export function registerRunnerHandlers(): void {
     });
 
     // Ensure image is pulled
-    ipcMain.handle('runner:ensure-image', async (_event, imageName: string) => {
+    ipcMain.handle('runner:ensure-image', async (event, imageName: string) => {
         try {
-            const mainWindow = BrowserWindow.getAllWindows()[0];
+            const send = replyTo(event.sender);
             const onProgress = (status: string) => {
-                mainWindow?.webContents.send('runner:progress', { status });
+                send('runner:progress', { status });
             };
 
             const ready = await runner.ensureImage(imageName, onProgress);
@@ -89,14 +99,14 @@ export function registerRunnerHandlers(): void {
     // ===================================
 
     // Start an interactive shell
-    ipcMain.handle('shell:start', async (_event, config: {
+    ipcMain.handle('shell:start', async (event, config: {
         shellId: string;
         image?: string;
         language?: string;
         workspacePath?: string;
     }) => {
         try {
-            const mainWindow = BrowserWindow.getAllWindows()[0];
+            const send = replyTo(event.sender);
             const workspacePath = config.workspacePath
                 ? await fsManager.resolveAllowedPath(config.workspacePath)
                 : undefined;
@@ -112,14 +122,14 @@ export function registerRunnerHandlers(): void {
 
             // Forward messages to renderer
             shell.on('message', (msg: { type: string; data: string }) => {
-                mainWindow?.webContents.send('shell:message', {
+                send('shell:message', {
                     shellId: config.shellId,
                     ...msg,
                 });
             });
 
             shell.on('close', () => {
-                mainWindow?.webContents.send('shell:closed', {
+                send('shell:closed', {
                     shellId: config.shellId,
                 });
             });
@@ -198,17 +208,17 @@ export function registerRunnerHandlers(): void {
     // ===================================
 
     // Run framework installation
-    ipcMain.handle('runner:setup-framework', async (_event, config: {
+    ipcMain.handle('runner:setup-framework', async (event, config: {
         projectPath: string;
         image: string;
         installCommand: string;
     }) => {
         try {
-            const mainWindow = BrowserWindow.getAllWindows()[0];
+            const send = replyTo(event.sender);
 
             // Progress callback
             const onProgress = (status: string) => {
-                mainWindow?.webContents.send('runner:setup-progress', { 
+                send('runner:setup-progress', { 
                     status,
                     type: 'progress'
                 });
@@ -216,7 +226,7 @@ export function registerRunnerHandlers(): void {
 
             // Output callback - send real-time output
             const onOutput = (data: string) => {
-                mainWindow?.webContents.send('runner:setup-output', { 
+                send('runner:setup-output', { 
                     data,
                     type: 'output'
                 });
@@ -247,7 +257,7 @@ export function registerRunnerHandlers(): void {
     // Get container info for a project
     ipcMain.handle('runner:get-project-container', async (_, projectPath: string) => {
         try {
-            const info = runner.getProjectContainerInfo(projectPath);
+            const info = await runner.getProjectContainerInfo(projectPath);
             return { success: true, container: info || null };
         } catch (error: any) {
             return { success: false, error: error.message, container: null };
