@@ -64,25 +64,25 @@ docker-ide/
 ## 🔧 Prérequis Système
 
 - **Docker Desktop** installé et démarré
-- **Node.js** 18+
-- **npm** ou **yarn**
-- **Système**: Windows 10+, macOS 10.15+, Linux (Ubuntu 20.04+)
+- **Node.js** 22.12+ et **npm** (pour le développement uniquement)
+- **Système** (64 bits uniquement, comme Electron 44) : Windows 10+, macOS 13 Ventura+, Linux (Ubuntu 22.04+, Debian 12+ ou Fedora récente)
 
 ## 🚀 Installation
 
 ```bash
 # Cloner le repository
-git clone https://github.com/votre-username/docker-ide.git
-cd docker-ide
+git clone https://github.com/Rococo77/DockerIDE.git
+cd DockerIDE
 
 # Installer les dépendances
 npm install
 
 # Lancer en mode développement
-npm run dev
+# (le premier lancement télécharge le binaire d'Electron, environ 100 Mo)
+npm start
 
-# Build pour production
-npm run build
+# Générer les installateurs dans out/make
+npm run make
 ```
 
 ## 📖 Utilisation

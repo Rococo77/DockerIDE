@@ -1,4 +1,6 @@
-import { ipcMain, dialog, BrowserWindow } from 'electron';
+import * as fs from 'fs';
+import * as path from 'path';
+import { app, ipcMain, dialog, BrowserWindow, OpenDialogOptions } from 'electron';
 import { FileSystemManager } from '../fs/FileSystemManager';
 import log from '../logger';
 
@@ -7,16 +9,33 @@ export function registerFileSystemHandlers(): void {
 
     log.info('[FileSystem] Registering file system IPC handlers...');
 
+    // Since Electron 43 a dialog without defaultPath opens in Downloads and the OS no longer
+    // reopens the last folder used, so remember it ourselves (home folder at first).
+    let lastDialogFolder: string | null = null;
+
+    const pickFolder = async (options: OpenDialogOptions): Promise<string | null> => {
+        const mainWindow = BrowserWindow.getAllWindows()[0];
+        const defaultPath = lastDialogFolder && fs.existsSync(lastDialogFolder)
+            ? lastDialogFolder
+            : app.getPath('home');
+        const result = await dialog.showOpenDialog(mainWindow, { defaultPath, ...options });
+
+        if (result.canceled || result.filePaths.length === 0) {
+            return null;
+        }
+        const folderPath = result.filePaths[0];
+        lastDialogFolder = path.dirname(folderPath);
+        return folderPath;
+    };
+
     // Open folder dialog
     ipcMain.handle('fs:open-folder', async () => {
-        const mainWindow = BrowserWindow.getAllWindows()[0];
-        const result = await dialog.showOpenDialog(mainWindow, {
+        const folderPath = await pickFolder({
             properties: ['openDirectory'],
             title: 'Ouvrir un dossier de projet'
         });
 
-        if (!result.canceled && result.filePaths.length > 0) {
-            const folderPath = result.filePaths[0];
+        if (folderPath) {
             fsManager.setWorkspace(folderPath);
             return { success: true, path: folderPath };
         }
@@ -33,14 +52,12 @@ export function registerFileSystemHandlers(): void {
 
     // Pick the location of a new project, without changing the open workspace
     ipcMain.handle('fs:select-directory', async () => {
-        const mainWindow = BrowserWindow.getAllWindows()[0];
-        const result = await dialog.showOpenDialog(mainWindow, {
+        const folderPath = await pickFolder({
             properties: ['openDirectory', 'createDirectory'],
             title: 'Choisir l\'emplacement du projet'
         });
 
-        if (!result.canceled && result.filePaths.length > 0) {
-            const folderPath = result.filePaths[0];
+        if (folderPath) {
             fsManager.setProjectParentDirectory(folderPath);
             return { success: true, path: folderPath };
         }
